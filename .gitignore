@@ -1,0 +1,14 @@
+node_modules
+dist
+*.local
+.env.local
+.DS_Store
+
+# Local configuration with secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Windows / IIS release packages (scripts/package-release.mjs)
+/release/

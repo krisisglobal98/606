@@ -1,0 +1,224 @@
+/* Additions to the existing result-table styles (ResultTable.module.css) for the pivot grid. */
+.grid {
+  table-layout: fixed;
+}
+.grid th,
+.grid td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Sticky header: both header rows stay visible while scrolling vertically. */
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* Header rows above the last have a fixed height so stacked sticky rows line up (top set inline). */
+.hRow th {
+  height: 30px;
+  vertical-align: middle;
+}
+/* Measure Group header: same header style, a quieter label in capitals. */
+.mgroup {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+.menuOff {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.menuOff small {
+  margin-left: auto;
+  font-size: 10.5px;
+}
+/* Frozen hierarchy columns: sticky on the left, above the scrolling measures. */
+.frz {
+  position: sticky;
+  z-index: 1;
+}
+.grid thead th.frz {
+  z-index: 4;
+}
+.grid tr:global(.grand) td.frz,
+.grid td.frz {
+  background: var(--surface);
+}
+.grid tbody tr td.frz {
+  background-clip: padding-box;
+}
+/* Divider between the frozen hierarchy area and the scrollable measures. */
+.edge {
+  box-shadow: inset -1px 0 0 var(--line-2, var(--line)), 4px 0 6px -4px rgb(15 23 42 / 0.14);
+}
+.thText {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: inherit;
+  min-width: 0;
+}
+.thText > svg {
+  display: inline;
+  vertical-align: middle;
+}
+.group {
+  text-align: center !important;
+  cursor: grab;
+  border-bottom: 1px solid var(--surface);
+}
+.group .thText {
+  align-items: center;
+}
+.groupHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+}
+.dropOn {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.sortable {
+  cursor: pointer;
+}
+.menuBtn {
+  padding: 1px;
+  opacity: 0.6;
+}
+.menuBtn:hover,
+.menuBtn[aria-expanded='true'] {
+  opacity: 1;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menuItem:hover {
+  background: var(--chip);
+}
+/* Column resize handle at the right edge of a header cell. */
+.resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+.resize:hover {
+  background: var(--primary);
+  opacity: 0.35;
+}
+.cellText {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.cellText > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.posText {
+  color: var(--success);
+}
+.state {
+  color: var(--muted);
+  font-weight: 500;
+  font-style: italic;
+}
+.stateRow td {
+  border-bottom-color: transparent;
+}
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary-strong);
+  font: inherit;
+  font-style: normal;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rule {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rule select {
+  width: auto;
+}
+.calcForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: min(460px, 80vw);
+}
+.nameChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+.nameChips button {
+  cursor: pointer;
+  border: 1px solid var(--line-2);
+}
+
+/* Kolom beku: pin per dimension header and the toolbar menu. */
+.pinBtn {
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  vertical-align: middle;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+th:hover > .pinBtn,
+.pinBtn:focus-visible,
+.pinOn {
+  opacity: 1;
+}
+.pinOn {
+  color: var(--primary);
+}
+.freezeMenu {
+  min-width: 240px;
+  padding-bottom: 4px;
+}
+.freezeMenu .menuItem span {
+  display: flex;
+  flex-direction: column;
+}
+.freezeMenu small {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: auto;
+}
+.freezeMenu span small {
+  margin-left: 0;
+}
+.menuSep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0;
+}
+@media (hover: none) {
+  .pinBtn {
+    opacity: 1;
+  }
+}

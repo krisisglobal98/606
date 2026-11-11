@@ -1,0 +1,219 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  padding: 0 2px;
+}
+.crumbs a {
+  color: var(--muted);
+}
+.crumbs a:hover {
+  color: var(--primary);
+}
+.crumbs [aria-current] {
+  color: var(--ink);
+  font-weight: 700;
+}
+.head {
+  display: flex;
+  /* Only the actions remain visible (the title is for screen readers). */
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 4px 2px 0;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ---------------- Per role ---------------- */
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--gap);
+}
+@media (max-width: 640px) {
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .roleCard > :last-child {
+    display: none;
+  }
+}
+.roleCard {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.roleCount {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1.15;
+}
+.roleCount small {
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* ---------------- Matrix ---------------- */
+.scroll {
+  overflow-x: auto;
+  border-radius: var(--radius);
+}
+.table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.table th,
+.table td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.menuCol {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  min-width: 230px;
+  width: 40%;
+}
+.table thead .menuCol {
+  z-index: 3;
+  background: var(--surface-2);
+}
+.roleCol,
+.cell {
+  text-align: center !important;
+  width: 15%;
+  min-width: 96px;
+}
+.menuName {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.menuName > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.menuName small {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+}
+.group th,
+.group td {
+  border-bottom-color: transparent;
+}
+.child .menuCol {
+  padding-left: 22px;
+}
+.child b {
+  font-weight: 600;
+}
+.branch {
+  color: var(--line-2);
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+.switchWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.changed {
+  background: var(--accent-soft);
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning-dot);
+}
+.switchWrap .dot {
+  position: absolute;
+  right: -11px;
+  top: -2px;
+}
+.muted .switchWrap {
+  opacity: 0.45;
+}
+.na {
+  display: inline-flex;
+  color: var(--line-2);
+}
+.locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+
+/* ---------------- Legend ---------------- */
+.foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 2px;
+}
+.foot p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .table {
+    min-width: 0;
+  }
+  .menuCol {
+    min-width: 150px;
+    width: auto;
+  }
+  .roleCol,
+  .cell {
+    min-width: 72px;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+}

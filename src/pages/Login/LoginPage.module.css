@@ -1,0 +1,123 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background:
+    linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--bg);
+  background-blend-mode: normal;
+}
+.page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, var(--bg) 35%, transparent 80%);
+  pointer-events: none;
+}
+.wrap {
+  position: relative;
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.brand {
+  /* Logo on the left of the name and tagline, the pair centred above the form. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: left;
+}
+.brand img {
+  flex: none;
+  border-radius: 24%;
+  box-shadow: var(--shadow-pop);
+}
+.brand b {
+  display: block;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.brand span {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.alert {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: var(--fs-control);
+  font-weight: 600;
+}
+.alert svg {
+  flex: none;
+  margin-top: 1px;
+}
+.demo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.demo b {
+  color: var(--primary-strong);
+}
+.demo code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  background: var(--surface);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.foot {
+  text-align: center;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.language {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.languageOption {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.languageOption[aria-pressed='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}

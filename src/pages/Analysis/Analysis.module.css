@@ -1,0 +1,1864 @@
+/* Workspace grid mirrors the reference: config | result | field list. */
+.ws {
+  display: grid;
+  grid-template-columns: var(--left-w, 236px) minmax(0, 1fr) var(--right-w, 248px);
+  grid-template-areas: 'left main right';
+  gap: var(--gap);
+  align-items: start;
+}
+/* Collapse / focus states only change the grid; the cards themselves keep their design. */
+.ws {
+  transition: grid-template-columns 180ms ease;
+}
+.ws [hidden] {
+  display: none !important;
+}
+/* Table Focus Mode: Tabel Hasil takes the whole workspace. */
+.ws.focusWs {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'main';
+}
+.left {
+  grid-area: left;
+}
+.main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+.right {
+  grid-area: right;
+}
+/* Side columns stay in view and never run longer than the screen: the open card shrinks to fit (title, search and
+   footer stay put, only its body scrolls), and the collapsed tabs below it keep their size. */
+.sticky {
+  position: sticky;
+  top: var(--gap);
+  /* The screen less the app header above the workspace, so the column also fits before the page is scrolled. */
+  max-height: calc(100dvh - 84px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The open card of a side column (not the tab row, which keeps its own direction, e.g. a row on narrow screens). */
+.sticky > div:first-child:not(.tabs) {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.sticky > .tabs {
+  flex: none;
+}
+.sideCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+.sideCard > * {
+  flex: none;
+}
+.sideCard > .sideBody {
+  flex: 1 1 auto;
+  min-height: 72px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  margin-right: -6px;
+  padding-right: 6px;
+}
+
+/* ---------- Pengaturan Data ---------- */
+.pd {
+  padding: 14px 14px 12px;
+}
+.pdHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--fs-section);
+  font-weight: 700;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.pdHead svg {
+  color: var(--muted);
+}
+.pdGroup {
+  padding: 11px 0 9px;
+  border-bottom: 1px solid var(--line);
+}
+.pdGroup:last-of-type {
+  border-bottom: 0;
+}
+.pdGroup h3 {
+  font-size: 13.5px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.pdGroup h3 small {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.clearBtn {
+  border: 0;
+  background: none;
+  color: var(--primary-strong);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.clearBtn:hover {
+  text-decoration: underline;
+}
+.dwToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  height: 38px;
+  padding: 0 10px;
+  text-align: left;
+  transition: border-color var(--ease);
+}
+.dwToggle:hover {
+  border-color: var(--primary);
+}
+.dwToggle[aria-expanded='true'] {
+  border-color: var(--primary);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.dwToggle > svg:first-child {
+  color: var(--primary);
+}
+/* Dataset name (one line, ellipsis) above its category; formerly three separate rules, same result. */
+.dwToggle b {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dwToggle small {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+.dwList {
+  border: 1px solid var(--primary);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: 4px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dwOpt {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 6px 4px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.dwOpt:hover {
+  background: var(--chip);
+}
+.dwOpt input {
+  margin-top: 2px;
+}
+.dwOpt span {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+}
+.dwOpt small {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.pdFoot {
+  margin-top: 10px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  padding: 7px 9px;
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+}
+.pdFoot svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--success);
+}
+
+/* ---------- Field List ---------- */
+.fl {
+  padding: 12px;
+}
+.flHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.flHead b {
+  font-size: var(--fs-section);
+}
+.search {
+  margin: 10px 0 4px;
+}
+.search input {
+  height: 32px;
+  font-size: var(--fs-control);
+}
+.grp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 9px 0 4px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+}
+.grp span {
+  flex: 1;
+  text-align: left;
+}
+.grp small {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  background: var(--chip);
+  border-radius: 8px;
+  padding: 0 6px;
+}
+.flList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.flHint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 10px;
+  line-height: 1.45;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.flDrop {
+  outline: 2px dashed var(--danger);
+  outline-offset: -4px;
+}
+
+/* ---------- Layout zones ---------- */
+.lay {
+  padding: 12px 14px;
+  border: 1.5px dashed var(--line-drop);
+  background: var(--surface-sunken);
+}
+.layHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.layHead h2 span {
+  font-weight: 400;
+  color: var(--muted);
+}
+.layGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.zone {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px 10px;
+  min-height: 82px;
+  background: var(--surface);
+  transition: background var(--ease), outline-color var(--ease);
+}
+.zoneTitle {
+  font-weight: 700;
+  margin-bottom: 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.zoneTitle small {
+  font-weight: 400;
+  color: var(--muted);
+}
+.zoneList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ph {
+  color: var(--faint);
+  font-size: 12px;
+  padding: 6px 2px;
+}
+.over {
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
+  background: var(--primary-soft);
+}
+
+/* ---------- Filter (contents of the filter modal: Analisis + saved reports) ---------- */
+.fb {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+/* Controls in rows of equal-width cells; the period takes a row of its own. */
+.fbGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px 16px;
+}
+.fbCtl {
+  min-width: 0;
+}
+.fbSection {
+  margin: 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.fbSection > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.fbSection > legend small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: var(--fs-meta);
+}
+.fbSection > .fbGrid {
+  clear: both;
+}
+.dates {
+  grid-column: 1 / -1;
+}
+.dates > :global(.t-label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dates > :global(.t-label) svg {
+  color: var(--muted);
+}
+.dateRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dateRow input {
+  width: 150px;
+}
+.dateSep {
+  color: var(--muted);
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.chipText {
+  min-width: 0;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .dateRow input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+}
+
+/* ---------- Result ---------- */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap);
+}
+.updating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.chartNote {
+  margin-top: 8px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.chartActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.axisSel {
+  width: 170px;
+}
+
+.iconTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.iconTitle svg {
+  color: var(--primary);
+}
+
+@media (max-width: 1200px) {
+  .ws {
+    grid-template-columns: 228px minmax(0, 1fr);
+    grid-template-areas: 'left main' 'right main';
+    grid-template-rows: auto 1fr;
+  }
+  .sticky {
+    position: static;
+    max-height: none;
+  }
+  /* Stacked side cards: a fixed scroll height instead of the screen height. */
+  .sideCard > .sideBody {
+    max-height: 420px;
+  }
+}
+@media (max-width: 1100px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 860px) {
+  .ws {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'main' 'left' 'right';
+    grid-template-rows: none;
+  }
+  .layGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- Dataset source (sample vs real) ---------- */
+.dwHead {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 4px 2px;
+}
+.dwSource {
+  margin-top: 7px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pdSearch {
+  height: 30px;
+  font-size: 12.5px;
+  margin: 2px 0 6px;
+  width: 100%;
+}
+.pdScroll {
+  max-height: 210px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.exec {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.exec svg {
+  flex: none;
+  margin-top: 2px;
+}
+.exec b {
+  color: var(--ink-2, var(--ink));
+  font-weight: 600;
+}
+/* ---------- Collapse: vertical edge tabs ---------- */
+.headToggle {
+  margin-left: auto;
+  flex: none;
+}
+/* Collapsed cards stack as vertical tabs at their edge of the screen. */
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tabs:empty {
+  display: none;
+}
+.left > div:not([hidden]) + .tabs,
+.right > div:not([hidden]) + .tabs {
+  margin-top: 8px;
+}
+.tabsLeft {
+  align-items: flex-start;
+}
+.tabsRight {
+  align-items: flex-end;
+}
+/* The tabs themselves: shared components/common/EdgeTab (global .edge-tab classes). */
+/* Subtle entrance when a card returns to its place or a tab appears. */
+.enter {
+  animation: dodEnter 160ms ease-out;
+}
+@keyframes dodEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .enter {
+    animation: none;
+  }
+  .ws {
+    transition: none;
+  }
+}
+@media (max-width: 1200px) {
+  .ws.sideNarrow {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .ws.focusWs {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'main';
+  }
+}
+@media (max-width: 1200px) and (min-width: 861px) {
+  /* Edges stacked in one column: when that column is wide, tabs read as compact horizontal cards. */
+  .ws:not(.sideNarrow) :global(.edge-tab) {
+    width: 100%;
+  }
+  .ws:not(.sideNarrow) :global(.edge-tab__btn) {
+    flex-direction: row;
+    padding: 6px 8px;
+  }
+  .ws:not(.sideNarrow) :global(.edge-tab__text) {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+}
+@media (max-width: 860px) {
+  .ws.sideNarrow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .tabs :global(.edge-tab) {
+    width: auto;
+  }
+  .tabs :global(.edge-tab__btn) {
+    flex-direction: row;
+    padding: 6px 8px;
+  }
+  .tabs :global(.edge-tab__text) {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+}
+
+/* ---------- Field List: measure categories ---------- */
+.flCat + .flCat {
+  margin-top: 6px;
+}
+.flCatHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 4px 2px 22px;
+}
+.flAdd {
+  border: 0;
+  background: none;
+  color: var(--primary-strong);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+.flCalc {
+  display: flex;
+  align-items: center;
+}
+.flCalc > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Layout: measures with optional Measure Groups ---------- */
+.mzActions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+.mzBtn {
+  border: 0;
+  background: none;
+  color: var(--primary-strong);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.mzBtn:hover {
+  background: var(--chip);
+}
+.mzList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+}
+.mzItem {
+  display: inline-flex;
+  max-width: 100%;
+}
+.mGroup {
+  flex: 1 1 100%;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px 8px;
+  background: var(--surface-2);
+}
+.mGroupHead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.mGroupGrip {
+  color: var(--faint);
+  cursor: grab;
+  display: inline-flex;
+}
+.mGroupName {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+}
+.mGroupName:hover,
+.mGroupName:focus {
+  border-color: var(--line-2);
+  background: var(--surface);
+  outline: none;
+}
+.mGroupList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+}
+.chipMenu {
+  padding: 1px;
+}
+.mMenu {
+  width: 270px;
+  padding: 2px 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: default;
+}
+.mMenuRow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.mMenuRow .input {
+  height: 30px;
+}
+.mMenuSub {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.mMenuCalc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  padding: 2px 0;
+}
+.mMenuCalc label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.mMenuCalc small {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.mMenuOff {
+  color: var(--faint);
+}
+.mMenuFmt {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.mMenuReset {
+  margin-top: 6px;
+  border: 0;
+  background: none;
+  color: var(--primary-strong);
+  font: inherit;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+/* Pengaturan Data: Kategori → Sub-kategori → Dataset */
+.dwSearch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+  padding: 0 8px;
+  height: 30px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  color: var(--muted);
+}
+.dwSearch:focus-within {
+  border-color: var(--primary);
+}
+.dwSearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.dwCrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 0 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+  min-width: 0;
+}
+.dwCrumb button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-weight: 600;
+  padding: 2px 2px 2px 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dwCrumb span {
+  color: var(--muted);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dwCrumb span::before {
+  content: '/';
+  margin: 0 4px 0 2px;
+  font-weight: 400;
+}
+.dwScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.dwFolder {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 7px 4px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+}
+.dwFolder:hover {
+  background: var(--chip);
+}
+.dwFolder > svg:first-child {
+  color: var(--primary);
+  flex: none;
+}
+.dwFolder b {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dwFolder small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.dwFolder > svg:last-child {
+  color: var(--muted);
+  flex: none;
+}
+.dwLabel {
+  font-weight: 600;
+}
+.dwEmpty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 4px;
+}
+.dwToggle b .dwCat {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tabel Hasil's slot in the main column (hidden while Data Profil is open). */
+.tableSlot {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tableSlot[hidden] {
+  display: none;
+}
+
+/* ---------- Data Profil (profile reports from the master data) ---------- */
+.profileBody {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-areas: 'ctrl view' 'list view';
+  grid-template-rows: auto 1fr;
+  column-gap: 16px;
+  row-gap: 10px;
+  align-items: start;
+}
+/* Kebun / Bisnis Unit, then Jenis profil below it. */
+.profileControls {
+  grid-area: ctrl;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.profileCount {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.profileCount b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.pickCount {
+  color: var(--faint);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.picker {
+  grid-area: list;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.pickList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 4px;
+  margin: 0 -4px;
+}
+.pickItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px 7px 10px;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.pickItem > span:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.pickTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.pickItem b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pickItem small {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pickItem > svg {
+  color: var(--faint);
+  flex: none;
+}
+.pickItem:hover {
+  border-color: var(--line-2);
+  background: var(--surface-2);
+}
+.pickItem[aria-selected='true'] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.pickItem[aria-selected='true'] > svg {
+  color: var(--primary);
+}
+.pickNone {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  padding: 12px 4px;
+}
+.profileView {
+  grid-area: view;
+  align-self: stretch;
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+}
+.profileDoc {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.profileHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.profileHead > div:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.profileHead h3 {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.profileHead h3 small {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.profileIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.profilePath {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.profileBadges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+.plate,
+.plateSm {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.plate {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+.plateSm {
+  font-size: 10px;
+  padding: 0 4px;
+  border-width: 1px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ptiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.ptile {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ptile small {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ptile b {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ptile b em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ptile span {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+.ptile_warning {
+  background: var(--warning-soft);
+  border-color: transparent;
+}
+.ptile_warning span {
+  color: var(--warning);
+  font-weight: 700;
+}
+.ptile_danger {
+  background: var(--danger-soft);
+  border-color: transparent;
+}
+.ptile_danger span {
+  color: var(--danger);
+  font-weight: 700;
+}
+.standBar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.standHead {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+.standHead b {
+  font-variant-numeric: tabular-nums;
+}
+.standTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.standTrack i {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: inherit;
+}
+.standLegend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+.standLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dotOn,
+.dotOff {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.dotOn {
+  background: var(--primary);
+}
+.dotOff {
+  background: var(--line-2);
+}
+.factGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+}
+.facts h3 {
+  font-size: var(--fs-micro);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+.facts dl > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 40%) minmax(0, 1fr);
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: var(--fs-meta);
+}
+.facts dt {
+  color: var(--muted);
+}
+.facts dd {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.factNone {
+  color: var(--faint);
+  font-weight: 400;
+}
+.profileMeta {
+  display: flex;
+  gap: 4px 14px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+.profileSource {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  color: var(--faint);
+  font-size: var(--fs-micro);
+}
+@media (max-width: 1100px) {
+  .ptiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 960px) {
+  .profileBody {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'ctrl' 'list' 'view';
+    grid-template-rows: auto;
+  }
+  .profileView {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .pickList {
+    max-height: 240px;
+  }
+}
+@media (max-width: 600px) {
+  .factGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .profileHead {
+    flex-wrap: wrap;
+  }
+  .profileBadges {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+/* ---------- Data Profil: tabs of Profil Blok and Kartu Kendaraan ---------- */
+.recordLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.recordLine b {
+  color: var(--ink);
+  font-size: 15px;
+}
+.ptabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+  scrollbar-width: thin;
+}
+.ptab {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-control);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+}
+.ptab:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.ptab[aria-selected='true'] {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.ptab:focus-visible {
+  outline: 2px solid var(--primary-ring);
+  outline-offset: -2px;
+}
+.opsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.opsHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.opsHead h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.opsHead p {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  margin-top: 2px;
+}
+.opsHead code {
+  font-size: var(--fs-micro);
+}
+.periodSel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.opsSub {
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.factLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.factLine b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.dayBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 120px;
+  padding: 4px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+.dayBars > div {
+  position: relative;
+  flex: 1;
+  max-width: 28px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.dayBars i {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  background: var(--primary);
+  border-radius: 3px 3px 0 0;
+}
+.dayBars span {
+  position: absolute;
+  bottom: -16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--faint);
+}
+.oscroll {
+  overflow-x: auto;
+}
+.otbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-meta);
+}
+.otbl th {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.otbl td {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.otbl tbody tr:last-child td {
+  border-bottom: 0;
+}
+.otbl tfoot td {
+  font-weight: 700;
+  border-top: 2px solid var(--line);
+  border-bottom: 0;
+}
+.otbl .r,
+.r {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.osub {
+  display: block;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+.zero td {
+  color: var(--faint);
+}
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: nowrap;
+}
+.shareBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.shareBar b {
+  width: 46px;
+  text-align: right;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.shareTrack {
+  flex: 1;
+  min-width: 60px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.shareTrack i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+}
+.costGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: start;
+}
+.donutBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.donutSub {
+  font-size: 10px;
+  fill: var(--muted);
+}
+.donutMain {
+  font-size: 15px;
+  font-weight: 700;
+  fill: var(--ink);
+}
+.legend {
+  list-style: none;
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-micro);
+}
+.legend li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+.tariff {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tariffBig {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.tariffBig small {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.meter {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.meter i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.meter em {
+  position: absolute;
+  top: -5px;
+  width: 2px;
+  height: 22px;
+  background: var(--ink);
+}
+.adminEdit {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-sm);
+}
+.adminEdit .field {
+  min-width: 220px;
+}
+.adminForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-sm);
+}
+.adminActs {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.adminActs .t-meta {
+  margin-right: auto;
+}
+.cardFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px 14px;
+}
+.decision {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 18px;
+  align-items: center;
+}
+.rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-meta);
+}
+.rows > div:last-child {
+  border-bottom: 0;
+}
+.rows dt {
+  color: var(--muted);
+}
+.rows dt small {
+  color: var(--faint);
+}
+.rows dd {
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.verdict {
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-micro);
+}
+.verdict small {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.verdict b {
+  font-size: 20px;
+  font-weight: 800;
+}
+.verdict_good {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.verdict_warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.verdict_bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.verdict_none {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.gauge {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+  overflow: hidden;
+}
+.gauge i {
+  display: block;
+  height: 100%;
+  background: currentColor;
+}
+@media (max-width: 760px) {
+  .costGrid,
+  .decision {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* No usable dataset: the state card, then Data Profil (it reads the master data). */
+.standalone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* ---------- Before any data is chosen (inside the shared StartCard) ---------- */
+.startPick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(560px, 100%);
+  margin-top: 10px;
+  text-align: left;
+}
+.startBrowser {
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+}
+.startBrowser > div:last-child {
+  max-height: 300px;
+}
+.profileOpen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.profileOpen > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.profileOpen small {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.saveBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+}
+.saveBar > :last-child {
+  margin-left: auto;
+}
+/* Active filters over the results (the filters themselves are edited in the modal). */
+.fSum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.fSumPeriod {
+  color: var(--ink-2, var(--ink));
+  font-weight: 600;
+}
+.fSumLink {
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  color: var(--primary-strong);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fSumLink:hover {
+  text-decoration: underline;
+}
+.saveBar[hidden] {
+  display: none;
+}
+.infoWrap {
+  position: relative;
+  display: inline-flex;
+}
+.infoPop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 380px;
+  max-width: 80vw;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgb(15 23 42 / 0.15);
+  visibility: hidden;
+  font-weight: 400;
+}
+.infoWrap:hover .infoPop,
+.infoWrap:focus-within .infoPop {
+  visibility: visible;
+}
+
+/* ---------- Areal Statement (Profil Blok) ---------- */
+.arealTiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.arealGrid {
+  columns: 2 300px;
+  column-gap: 20px;
+}
+.arealGrid > section {
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+.arealMissing {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: var(--fs-meta);
+}
+.arealMissing summary {
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+.arealMissing ul {
+  columns: 2 220px;
+  margin: 8px 0 2px;
+  padding-left: 18px;
+  color: var(--muted);
+}

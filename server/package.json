@@ -1,0 +1,32 @@
+{
+  "name": "dod-backend",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "DOD API: authentication, DOD metadata, and read-only access to external data warehouses.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=../.env src/main.ts",
+    "start": "node --env-file-if-exists=../.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "perf": "node --env-file-if-exists=../.env scripts/perf-test.ts",
+    "test": "node --env-file-if-exists=../.env --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@clickhouse/client": "1.24.0",
+    "fastify": "5.12.5",
+    "mongodb": "7.7.0",
+    "mysql2": "3.24.5",
+    "pg": "8.23.1",
+    "pino": "10.4.0",
+    "redis": "6.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "@types/pg": "8.23.1",
+    "typescript": "6.0.3"
+  }
+}

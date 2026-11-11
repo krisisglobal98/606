@@ -1,0 +1,275 @@
+/* Laporan Operasional: [left column of tabs] [Daftar Laporan] [report]. Collapsed cards and the filter opener sit as
+   vertical tabs in the left column. */
+.wrap {
+  display: grid;
+  grid-template-columns: 44px 272px minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+}
+.wrapNoSide {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+.wrapFocus {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rails {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rails[hidden] {
+  display: none;
+}
+
+/* Vertical tabs: shared components/common/EdgeTab (global .edge-tab classes). */
+@keyframes dodEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Daftar Laporan ---------- */
+.tree {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 120px);
+  animation: dodEnter 160ms ease-out;
+}
+.tree[hidden] {
+  display: none;
+}
+.treeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.treeTitle {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.treeTitle small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.treeBody {
+  min-height: 0;
+  margin: 0 -6px;
+  padding: 0 6px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tree .subs {
+  padding-left: 14px;
+  margin-left: 7px;
+  border-left: 1px solid var(--line);
+}
+.node,
+.report {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.node:hover,
+.report:hover {
+  background: var(--row-hover);
+}
+.node {
+  font-weight: 600;
+}
+.nodeSub {
+  font-weight: 500;
+}
+.node > svg {
+  flex: none;
+  color: var(--muted);
+}
+.node span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.node small {
+  color: var(--muted);
+  font-weight: 500;
+}
+.report {
+  align-items: flex-start;
+}
+.report > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.report span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.report small {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.reportOn {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-weight: 600;
+}
+.reportOn > svg {
+  color: var(--primary-strong);
+}
+
+/* ---------- Before a report is chosen (inside the shared StartCard) ---------- */
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(560px, 100%);
+  margin-top: 10px;
+  text-align: left;
+}
+.recent ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.recent .report > span {
+  flex: 1;
+}
+.recentWhen {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+/* ---------- Report ---------- */
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  animation: dodEnter 160ms ease-out;
+}
+.head[hidden] {
+  display: none;
+}
+.headMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.headTitle {
+  margin: 0;
+  font-size: var(--fs-section);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.headFilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-2, var(--ink));
+}
+.headFilter > svg {
+  color: var(--muted);
+}
+.headActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary-strong);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree,
+  .head {
+    animation: none;
+  }
+}
+/* Narrow screens: one column; the tabs become a horizontal row above the content. */
+@media (max-width: 800px) {
+  .wrap,
+  .wrapNoSide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rails {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .rails :global(.edge-tab) {
+    width: auto;
+  }
+  .rails :global(.edge-tab__btn) {
+    flex-direction: row;
+    padding: 6px 10px;
+  }
+  .rails :global(.edge-tab__text) {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+  .tree {
+    position: static;
+    max-height: none;
+  }
+  .rails:empty {
+    display: none;
+  }
+}

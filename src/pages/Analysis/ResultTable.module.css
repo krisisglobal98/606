@@ -1,0 +1,103 @@
+.wrap {
+  overflow: auto;
+  max-height: 520px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+}
+.pv {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 100%;
+}
+.pv th {
+  background: var(--th);
+  font-weight: 700;
+  padding: 6px var(--cell-x);
+  border-right: 1px solid var(--surface);
+  text-align: right;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  vertical-align: bottom;
+}
+.pv th small {
+  display: block;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.pv th.dimTh {
+  text-align: left;
+  background: var(--th-2);
+}
+.pv td {
+  padding: var(--cell-y) var(--cell-x);
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.pv td.lbl {
+  text-align: left;
+  font-weight: 600;
+  background: var(--surface);
+}
+.pv td.e {
+  border-bottom-color: transparent;
+}
+.pv tr.leaf td.lbl {
+  font-weight: 500;
+}
+.pv tbody tr:not(.grand):not(.total):hover td:not(.e) {
+  background: var(--row-hover);
+}
+.pv tr.total td {
+  background: var(--row-sub);
+  font-weight: 700;
+}
+.pv tr.total td.e {
+  background: var(--surface);
+  border-bottom-color: var(--line);
+}
+.pv tr.grand td {
+  background: var(--row-total);
+  font-weight: 800;
+  border-bottom: 0;
+  position: sticky;
+  bottom: 0;
+}
+.pv td.good {
+  background: var(--success-soft) !important;
+  color: var(--success);
+}
+.pv td.warn {
+  background: var(--warning-soft) !important;
+  color: var(--warning);
+}
+.pv td.bad {
+  background: var(--danger-soft) !important;
+  color: var(--danger);
+}
+.pv td.neg {
+  color: var(--danger);
+}
+.tg {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border: 1.4px solid var(--primary);
+  color: var(--primary);
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1;
+  margin-right: 7px;
+  background: var(--surface);
+  padding: 0;
+  vertical-align: -2px;
+  font-weight: 700;
+}
+.tg:hover {
+  background: var(--primary-soft);
+}

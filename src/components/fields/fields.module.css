@@ -1,0 +1,95 @@
+.item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 4px 6px 4px 4px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+  cursor: grab;
+  user-select: none;
+  transition: background var(--ease), color var(--ease);
+}
+.item:hover {
+  background: var(--chip);
+  color: var(--ink);
+}
+.item:active {
+  cursor: grabbing;
+}
+.grip {
+  color: var(--faint);
+  flex: none;
+}
+.type {
+  color: var(--muted);
+  flex: none;
+}
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unit {
+  font-size: 10.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.check {
+  color: var(--primary);
+  flex: none;
+}
+.used {
+  color: var(--primary-strong);
+  font-weight: 600;
+  background: var(--primary-soft);
+}
+.used .type {
+  color: var(--primary);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  border-radius: var(--radius-xs);
+  padding: 4px 4px 4px 6px;
+  cursor: grab;
+  user-select: none;
+  font-size: var(--fs-control);
+  max-width: 100%;
+  transition: border-color var(--ease), opacity var(--ease);
+}
+.chip:hover {
+  border-color: var(--line-drop);
+}
+.chip > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.chip .grip {
+  color: var(--faint);
+}
+.dragging {
+  opacity: 0.4;
+}
+
+.note {
+  display: block;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--primary-strong);
+  font-weight: 500;
+}

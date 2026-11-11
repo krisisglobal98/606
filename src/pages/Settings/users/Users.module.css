@@ -1,0 +1,234 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 4px 2px 0;
+}
+.desc {
+  color: var(--muted);
+  margin-top: 3px;
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  padding: 0 2px;
+}
+.crumbs a {
+  color: var(--muted);
+}
+.crumbs a:hover {
+  color: var(--primary);
+}
+.crumbs [aria-current] {
+  color: var(--ink);
+  font-weight: 700;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.toolbar > :first-child {
+  flex: 1 1 240px;
+}
+
+/* ---------------- Form ---------------- */
+.formHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.formHead h2 {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.formHead p {
+  color: var(--muted);
+  margin-top: 2px;
+}
+.section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+  background: var(--surface);
+}
+.section + .section {
+  margin-top: 12px;
+}
+.sectionHead {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.sectionHead > svg {
+  grid-row: span 2;
+  color: var(--primary);
+}
+.sectionHead b {
+  font-size: 14.5px;
+  font-weight: 800;
+}
+.sectionHead b small {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  margin-left: 4px;
+}
+.sectionHead span {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.basic {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 12px 16px;
+  align-items: start;
+}
+.hint {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.choiceRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.choice {
+  flex: 1 0 auto;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 600;
+  transition: border-color var(--ease), background var(--ease);
+}
+.choice:hover:not([aria-disabled='true']) {
+  border-color: var(--primary);
+}
+.choice input {
+  margin: 0;
+  accent-color: var(--primary);
+}
+.choice[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.choiceOn {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+.scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 28px;
+}
+.scopeRow {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: center;
+}
+.scopeRow > label {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.scopeRow > label small {
+  display: block;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.scopeRow :global(.field-error),
+.scopeRow > .hint {
+  grid-column: 2;
+}
+.sso {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 28px;
+}
+.status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px 28px;
+  align-items: center;
+}
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.footer p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.footerActs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 980px) {
+  .basic,
+  .scope,
+  .sso,
+  .status {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .scopeRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .scopeRow :global(.field-error),
+  .scopeRow > .hint {
+    grid-column: 1;
+  }
+}
