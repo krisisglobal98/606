@@ -9,6 +9,7 @@ import type { MeasureSetting } from '@/semantic/measureEngine'
 import { addGroup, flatten, fromMeasures, moveBlock, placeMeasure, removeGroup, removeMeasure, renameGroup, type MeasureBlock } from './measureLayout'
 import { useUiStore } from './uiStore'
 import type { SavedLayout } from '@/types/report'
+import { isMonthToDate, monthToDate } from './period'
 
 export type Zone = 'dimensions' | 'measures'
 export const zoneFor = (kind: FieldKind): Zone => (kind === 'dimension' ? 'dimensions' : 'measures')
@@ -61,6 +62,13 @@ interface AnalysisState {
   datasetId: string
   scope: DataScope
   filter: Filter
+  /**
+   * The period is still the default (month to date): it moves with the calendar each time the analysis is opened
+   * (refreshPeriod). Applying another period turns it off for this dataset; choosing a dataset turns it on again.
+   */
+  autoPeriod: boolean
+  /** Opening the analysis again: a default period becomes month to date of today. */
+  refreshPeriod: () => void
   dimensions: string[]
   /** Flat measure order, derived from measureLayout (kept for readers that need a plain list). */
   measures: string[]
@@ -106,22 +114,8 @@ interface AnalysisState {
 }
 
 const EMPTY_SCOPE: DataScope = { group: [], region: [], wilayah: [], perusahaan: [] }
-export const DEFAULT_FILTER: Filter = { perusahaan: null, wilayah: null, dateFrom: '2026-01-01', dateTo: '2026-09-30' }
-
-/** Year-to-date of the latest data, clamped to the dataset's coverage. */
-function defaultWindow(ds: Dataset): Pick<Filter, 'dateFrom' | 'dateTo'> {
-  // End at the last complete month, so a month that has only a few days of data does not read as a drop.
-  let to = ds.coverage.to
-  const [y, m, d] = to.split('-').map(Number) as [number, number, number]
-  const monthEnd = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  if (d < monthEnd && m > 1) {
-    const prev = new Date(Date.UTC(y, m - 1, 0))
-    to = prev.toISOString().slice(0, 10)
-  }
-  if (to < ds.coverage.from) to = ds.coverage.to
-  const from = `${to.slice(0, 4)}-01-01`
-  return { dateFrom: from < ds.coverage.from ? ds.coverage.from : from, dateTo: to }
-}
+/** The default period is month to date (first of the current month up to the day the page is opened). */
+const defaultFilter = (): Filter => ({ perusahaan: null, wilayah: null, ...monthToDate() })
 
 export const useAnalysisStore = create<AnalysisState>()(
   persist(
@@ -129,7 +123,12 @@ export const useAnalysisStore = create<AnalysisState>()(
       // Empty until the Analysis page picks a dataset from DOD's database (setDataset).
       datasetId: '',
       scope: EMPTY_SCOPE,
-      filter: DEFAULT_FILTER,
+      filter: defaultFilter(),
+      autoPeriod: true,
+      refreshPeriod: () => {
+        const { filter, autoPeriod } = get()
+        if (autoPeriod && !isMonthToDate(filter)) set({ filter: { ...filter, ...monthToDate() } })
+      },
       dimensions: [],
       measures: [],
       measureLayout: [],
@@ -159,13 +158,15 @@ export const useAnalysisStore = create<AnalysisState>()(
           measureSettings: {},
           chartBy: 'trend',
           table: { ...get().table, freeze: null },
-          // Each dataset has its own dimensions: scope and filters start empty, dates at its latest data.
+          // Each dataset has its own dimensions: scope and filters start empty, the period at month to date.
           scope: {},
-          filter: { perusahaan: null, wilayah: null, fields: {}, ...defaultWindow(ds) },
+          filter: { ...defaultFilter(), fields: {} },
+          autoPeriod: true,
         })
       },
       clearScope: (key) => set({ scope: { ...get().scope, [key]: [] } }),
-      applyFilters: (filter, scope) => set({ filter, scope }),
+      // A period the user keeps at month to date stays automatic; any other period is the user's choice.
+      applyFilters: (filter, scope) => set({ filter, scope, autoPeriod: isMonthToDate(filter) }),
       setFieldFilter: (dim, value) => set({ filter: { ...get().filter, fields: { ...get().filter.fields, [dim]: value } } }),
       placeField: (fieldId, zone, index) => {
         if (zone === 'measures') {
@@ -245,7 +246,7 @@ export const useAnalysisStore = create<AnalysisState>()(
           p.measureSettings = {}
         }
         if (version < 5 && ['produksi', 'perawatan', 'pemupukan'].includes(p.datasetId ?? '')) {
-          Object.assign(p, { datasetId: '', dimensions: [], measures: [], measureLayout: [], measureSettings: {}, scope: EMPTY_SCOPE, filter: DEFAULT_FILTER })
+          Object.assign(p, { datasetId: '', dimensions: [], measures: [], measureLayout: [], measureSettings: {}, scope: EMPTY_SCOPE, filter: defaultFilter() })
         }
         return p as AnalysisState
       },

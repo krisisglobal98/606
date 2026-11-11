@@ -153,13 +153,16 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
   const backRef = useRef<HTMLButtonElement>(null)
 
   const setDataset = useAnalysisStore((st) => st.setDataset)
+  const refreshPeriod = useAnalysisStore((st) => st.refreshPeriod)
   const found = catalog.datasets.find((d) => d.id === datasetId) ?? null
   // The page opens empty and light: no dataset is loaded and no query is sent until the user chooses data (or picks
   // up the last analysis of this session). Choosing marks the page as started until the user leaves it.
   const [started, setStarted] = useState(false)
   const dataset = started ? found : null
   const choose = (d: Dataset) => {
+    // A new dataset starts at month to date; the last analysis of the session moves a default period to today.
     if (d.id !== datasetId) setDataset(d)
+    else refreshPeriod()
     setStarted(true)
   }
   const denied = dataset?.access?.status === 'denied'
