@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Download, Filter as FilterIcon, Maximize2, Minimize2, MoreHorizontal, Paintbrush, Pin, PinOff, Settings2, Snowflake } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
@@ -10,6 +10,7 @@ import { useAnalysisStore } from '@/stores/analysisStore'
 import { ruleMatches, useGridPrefs } from '@/stores/gridPrefsStore'
 import { toast } from '@/stores/uiStore'
 import type { Field, GridAgg } from '@/types/contracts'
+import { csvCell } from '@/utils/csv'
 import { formatNumber, formatSigned } from '@/utils/format'
 import t from '../ResultTable.module.css'
 import g from './PivotGrid.module.css'
@@ -194,15 +195,30 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
   const maxLevel = rows.reduce((d, r) => (r.t === 'node' ? Math.max(d, r.n.level) : d), 0)
 
   /* ---------- virtualisation ---------- */
-  // Row height is measured from a rendered row on scroll (density setting changes it).
+  // Row height is measured from a rendered row (density setting changes it); the visible height from the scroller.
   const [scroll, setScroll] = useState({ top: 0, h: 520, rowH: 28 })
   const rowH = scroll.rowH
-  const onScroll = () => {
+  const onScroll = useCallback(() => {
     const el = scroller.current
     if (!el) return
     const h = el.querySelector('tbody tr:not([aria-hidden])')?.getBoundingClientRect().height
-    setScroll({ top: el.scrollTop, h: el.clientHeight, rowH: h && h > 10 ? h : rowH })
-  }
+    setScroll((s) => {
+      const next = { top: el.scrollTop, h: el.clientHeight, rowH: h && h > 10 ? h : s.rowH }
+      return s.top === next.top && s.h === next.h && s.rowH === next.rowH ? s : next
+    })
+  }, [])
+  // The visible height is also measured without a scroll: when the table appears and whenever its box changes
+  // (tall screen, Fokus Tabel, window resize). Otherwise only the first 520 px of rows were rendered until the user
+  // scrolled, and on a screen tall enough to show the whole table without a scrollbar the rest never appeared.
+  const tableShown = hier.status === 'ok' && rows.length > 0
+  useLayoutEffect(() => {
+    const el = scroller.current
+    if (!el || !tableShown) return
+    onScroll()
+    const ro = new ResizeObserver(onScroll)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [tableShown, focus, onScroll])
   const start = Math.max(0, Math.floor(scroll.top / rowH) - OVERSCAN)
   const end = Math.min(rows.length, Math.ceil((scroll.top + scroll.h) / rowH) + OVERSCAN)
   const slice = rows.slice(start, end)
@@ -309,7 +325,7 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
 
   /* ---------- export (visible rows, as shown) ---------- */
   const exportCsv = () => {
-    const q = (v: string) => `"${v.replace(/"/g, '""')}"`
+    const q = csvCell
     // CSV follows the Layout: one column per leaf, named Group / Measure / Calculation (unit).
     const head = [...(hcols.length ? hcols.map((d) => d.label) : ['']), ...cols.map((c) => `${colLabel(c)}${c.meta.unit ? ` (${c.meta.unit})` : ''}`)]
     const lines = [head.map(q).join(',')]
