@@ -34,13 +34,13 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<Errors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [deviceInUse, setDeviceInUse] = useState(false)
 
   if (valid && !loading) return <Navigate to={allowedLanding(useAuthStore.getState().user, from ?? landing)} replace />
 
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault()
+  const submit = async (takeOver: boolean) => {
     setFormError(null)
-    const parsed = LoginRequestSchema.safeParse({ username, password })
+    const parsed = LoginRequestSchema.safeParse({ username, password, ...(takeOver ? { takeOver } : {}) })
     if (!parsed.success) {
       const fe: Errors = {}
       for (const i of parsed.error.issues) fe[i.path[0] as keyof Errors] ??= i.message
@@ -52,11 +52,17 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const user = await login(parsed.data)
+      setDeviceInUse(false)
       navigate(allowedLanding(user, from ?? landing), { replace: true })
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : tr('Tidak dapat masuk. Coba lagi.'))
+      setDeviceInUse(err instanceof ApiError && err.code === 'DEVICE_IN_USE')
       setLoading(false)
     }
+  }
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    void submit(false)
   }
 
   return (
@@ -92,6 +98,12 @@ export default function LoginPage() {
               <AlertCircle size={16} aria-hidden />
               <span>{formError}</span>
             </div>
+          )}
+          {/* One device, one user: the other user is signed out of this device (every browser), then this one signs in. */}
+          {deviceInUse && (
+            <Button type="button" variant="outline" block onClick={() => void submit(true)} disabled={loading}>
+              {tr('Keluarkan akun tersebut dan masuk')}
+            </Button>
           )}
 
           <TextField

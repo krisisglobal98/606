@@ -28,6 +28,8 @@ export type User = z.infer<typeof UserSchema>
 export const LoginRequestSchema = z.object({
   username: z.string().trim().min(1, tr('Username wajib diisi')),
   password: z.string().min(1, tr('Password wajib diisi')),
+  /** One device, one user: sign the other user of this device out first. */
+  takeOver: z.boolean().optional(),
 })
 export type LoginRequest = z.infer<typeof LoginRequestSchema>
 

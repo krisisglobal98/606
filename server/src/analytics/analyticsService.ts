@@ -75,18 +75,24 @@ export class AnalyticsService {
     this.cache = cache
   }
 
-  private async context(datasetId: string, signal?: AbortSignal) {
+  /**
+   * The dataset, the user's data access to it, then the source metadata. Access comes before anything touches the
+   * source: a refused user gets the refusal (audited), never a source lookup or a source error.
+   */
+  private async context(datasetId: string, signal: AbortSignal | undefined, user: User, before?: (d: Awaited<ReturnType<DatasetService['get']>>) => void) {
     const d = await this.datasets.get(datasetId)
     if (d.status === 'archived') throw new AppError(410, 'DATASET_ARCHIVED', 'Dataset ini sudah diarsipkan.')
+    before?.(d)
+    const { rows: scope } = await this.access.rowScope(user, d)
     const tables = await this.datasets.tables(d.connectionId, d.schema, d.semantic.sources.map((s) => s.table), signal)
-    return { d, b: new SqlBuilder(d.semantic, d.schema, tables, dialectOf(this.datasets.connection(d.connectionId).dbType)) }
+    return { d, scope, b: new SqlBuilder(d.semantic, d.schema, tables, dialectOf(this.datasets.connection(d.connectionId).dbType)) }
   }
 
   /** Distinct values of one dimension (for scope and filter pickers), bounded and cached. */
   async values(datasetId: string, field: string, q: string | null, signal: AbortSignal | undefined, user: User) {
-    const { d, b } = await this.context(datasetId, signal)
-    if (isTimeDim(field) || !d.semantic.dimensions.some((x) => x.id === field)) throw badRequest('UNKNOWN_DIMENSION', `Dimensi "${field}" tidak ada di dataset ini.`)
-    const { rows: scope } = await this.access.rowScope(user, d)
+    const { d, b, scope } = await this.context(datasetId, signal, user, (d) => {
+      if (isTimeDim(field) || !d.semantic.dimensions.some((x) => x.id === field)) throw badRequest('UNKNOWN_DIMENSION', `Dimensi "${field}" tidak ada di dataset ini.`)
+    })
     const max = this.config.limits.distinctValuesMax
     // The scope fingerprint is part of the key: values of one scope are never served to another.
     const key = `vals|${d.id}|${d.updatedAt}|${field}|${q ?? ''}|${scope.fingerprint}`
@@ -111,9 +117,8 @@ export class AnalyticsService {
 
   async query(input: AnalyticsQuery, signal: AbortSignal | undefined, user: User) {
     const t0 = performance.now()
-    const { d, b } = await this.context(input.datasetId, signal)
-    // Data access is checked on every request, before the cache: a refused user never gets a cached result.
-    const { rows: scope } = await this.access.rowScope(user, d)
+    // Data access is checked on every request (in context), before the cache: a refused user never gets a cached result.
+    const { d, b, scope } = await this.context(input.datasetId, signal, user)
     const run = () => this.compute(input, d, b, scope, signal, user.id, t0)
     if (!this.cache?.enabled) return run()
     const key = `q|${d.id}|${d.updatedAt}|${scopeKey(scope)}|${stableKey(input)}`

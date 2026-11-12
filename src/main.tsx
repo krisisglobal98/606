@@ -12,6 +12,7 @@ import { ThemeSync } from '@/app/ThemeSync'
 import { Toaster } from '@/components/common/Toaster'
 import { LoadingState } from '@/components/common/StateView'
 import '@/stores/authStore'
+import '@/app/auth/deviceSessionSync'
 import { tr } from '@/i18n'
 
 function bootstrap() {

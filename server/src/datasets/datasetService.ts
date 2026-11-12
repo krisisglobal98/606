@@ -130,6 +130,12 @@ export class DatasetService {
     })
   }
 
+  /** Every active dataset with its model, in one query (the catalog; list() + get() per dataset was 1 + N queries). */
+  async activeRecords(): Promise<DatasetRecord[]> {
+    const rows = (await this.db.query<Row>(`${SELECT} WHERE d.status = 'active' ORDER BY d.updated_at DESC`)).rows
+    return rows.map((r) => this.toRecord(r))
+  }
+
   async get(id: string): Promise<DatasetRecord> {
     const r = (await this.db.query<Row>(`${SELECT} WHERE d.id = $1`, [id])).rows[0]
     if (!r) throw notFound('Dataset tidak ditemukan.')
@@ -243,7 +249,10 @@ export class DatasetService {
   async coverage(d: DatasetRecord, scope: RowScope, signal?: AbortSignal, opts: { fresh?: boolean } = {}): Promise<{ from: string; to: string } | null> {
     // fresh: read now (and refresh the cache), e.g. to notice data an upstream load just added.
     // Scoped: MIN/MAX over the rows the scope may see only; the scope fingerprint is part of the key.
-    return this.cached(`cov|${d.id}|${d.updatedAt}|${scope.fingerprint}`, opts.fresh ? 0 : 5 * 60_000, async () => {
+    // After 5 minutes the entry is refreshed in the background while the previous value (at most 30 minutes old)
+    // is still answered, so the catalog does not wait on dozens of MIN/MAX queries every 5 minutes.
+    const key = `cov|${d.id}|${d.updatedAt}|${scope.fingerprint}`
+    return this.cachedStale(key, opts.fresh ? 0 : 5 * 60_000, opts.fresh ? 0 : 30 * 60_000, signal, async (signal) => {
       const c = this.dw.config(d.connectionId)
       const b = scope.kind === 'rows' ? new SqlBuilder(d.semantic, d.schema, await this.tables(d.connectionId, d.schema, d.semantic.sources.map((s) => s.table), signal), dialectOf(c.dbType)) : null
       const parts = await Promise.all(
@@ -283,5 +292,36 @@ export class DatasetService {
     const value = await load()
     this.cache.set(key, { at: Date.now(), value })
     return value
+  }
+
+  private readonly refreshing = new Map<string, Promise<unknown>>()
+
+  /**
+   * Like cached(), with stale-while-revalidate: an entry older than `ttl` but younger than `maxStale` is answered
+   * at once while ONE background reload (without the request's abort signal, so it outlives the request) replaces
+   * it; a failed reload keeps the old entry until `maxStale`. A missing or too old entry is loaded for the caller.
+   */
+  async cachedStale<T>(key: string, ttl: number, maxStale: number, signal: AbortSignal | undefined, load: (signal?: AbortSignal) => Promise<T>): Promise<T> {
+    const hit = this.cache.get(key)
+    const age = hit ? Date.now() - hit.at : Infinity
+    if (hit && age < ttl) return hit.value as T
+    if (hit && age < maxStale) {
+      if (!this.refreshing.has(key)) {
+        const p = load()
+          .then((value) => void this.cache.set(key, { at: Date.now(), value }))
+          .catch(() => undefined)
+          .finally(() => this.refreshing.delete(key))
+        this.refreshing.set(key, p)
+      }
+      return hit.value as T
+    }
+    const value = await load(signal)
+    this.cache.set(key, { at: Date.now(), value })
+    return value
+  }
+
+  /** Test hook: settles the background reloads started by cachedStale. */
+  async settled() {
+    await Promise.all([...this.refreshing.values()])
   }
 }

@@ -146,6 +146,10 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
   const meaIds = useAnalysisStore((st) => st.measures)
   const chartBy = useAnalysisStore((st) => st.chartBy)
   const collapsed = useAnalysisStore((st) => st.collapsed)
+  // The chart (ECharts, ~180 KB compressed) is mounted once its card is first opened, not while it is collapsed:
+  // a slow connection then gets KPI and Tabel Hasil without waiting for the chart library. Once opened it stays mounted.
+  const [chartSeen, setChartSeen] = useState(!collapsed.chart)
+  if (!collapsed.chart && !chartSeen) setChartSeen(true)
   const setPanel = useAnalysisStore((st) => st.setPanel)
   const focus = useAnalysisStore((st) => st.tableFocus)
   const setFocus = useAnalysisStore((st) => st.setTableFocus)
@@ -391,7 +395,7 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
                 : Array.from({ length: 4 }, (_, i) => <KpiSkeleton key={i} />)}
             </section>
             <div id="panel-chart" className={s.enter} hidden={focus || collapsed.chart}>
-              <ResultChart {...panel} refreshing={refreshing} dataset={dataset} dimensions={dimensions} />
+              {chartSeen && <ResultChart {...panel} refreshing={refreshing} dataset={dataset} dimensions={dimensions} />}
             </div>
             {profile}
             {/* Data Profil and Tabel Hasil take turns: opening the profile collapses the table, collapsing it brings the table back. */}

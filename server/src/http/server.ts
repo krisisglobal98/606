@@ -25,6 +25,18 @@ export function bearer(req: FastifyRequest): string | null {
   return h.startsWith('Bearer ') ? h.slice(7).trim() || null : null
 }
 
+/**
+ * Whether a parsed input (JSON value, query or params object) contains U+0000 in any string or key, or is nested
+ * deeper than any DOD request is (64 levels), where such a character could not be looked for.
+ */
+export function hasNul(v: unknown, depth = 0): boolean {
+  if (typeof v === 'string') return v.includes('\u0000')
+  if (!v || typeof v !== 'object') return false
+  if (depth > 64) return true
+  if (Array.isArray(v)) return v.some((x) => hasNul(x, depth + 1))
+  return Object.entries(v).some(([k, x]) => k.includes('\u0000') || hasNul(x, depth + 1))
+}
+
 export function requireRole(req: FastifyRequest, ...roles: Role[]): User {
   const u = req.user
   if (!u) throw new AppError(401, 'UNAUTHENTICATED', 'Sesi berakhir. Silakan masuk kembali.')
@@ -67,6 +79,12 @@ export function createServer(config: Config, log: Logger, auth: AuthService): Fa
       return
     }
     req.user = await auth.userForToken(bearer(req))
+  })
+
+  // PostgreSQL text cannot hold U+0000: a NUL in any input (JSON body, query string, path) would fail inside the
+  // metadata or source database (500/503). It is never valid input, so the request is refused before any handler.
+  app.addHook('preValidation', async (req) => {
+    if (hasNul(req.body) || hasNul(req.query) || hasNul(req.params)) throw new AppError(400, 'INVALID_CHARACTER', 'Permintaan berisi karakter atau struktur yang tidak valid.')
   })
 
   registerCompression(app)

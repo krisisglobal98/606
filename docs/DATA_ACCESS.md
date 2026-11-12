@@ -39,6 +39,7 @@ Aturan:
 - **Hanya baris aktif.** Yang dihitung hanya baris master yang aktif (`is_active AND NOT is_deleted`, dan dalam `valid_from`/`valid_to` bila terisi). Organisasi yang dinonaktifkan di PIMS langsung tidak memberi data lagi, paling lambat setelah masa berlaku cache.
 - **Relasi BU–divisi bukan bukti akses.** `ms_businessunitdivision` hanya dipakai sebagai peringatan di form (K-07a), tidak untuk memberi atau menolak akses.
 - **Level yang sumbernya belum ditetapkan tidak bisa dipakai.** Ini berlaku untuk Region, Wilayah, dan GMK: form menonaktifkannya dan resolver menolaknya.
+- **Akses diputuskan sebelum sumber disentuh.** Query, grid, dan nilai filter memeriksa cakupan pengguna terhadap dataset lebih dulu (penolakan diaudit), baru kemudian membaca metadata tabel sumber. Pengguna yang ditolak tidak pernah memicu akses ke sumber dan tidak melihat kondisi koneksinya (`server/src/analytics/analyticsService.ts`, `context()`).
 
 ## 3. Dataset
 

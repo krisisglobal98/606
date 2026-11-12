@@ -32,7 +32,8 @@ import { dialectOf, quoteIdent } from '../dw/sql.ts'
 import { clientIp } from './clientIp.ts'
 import { bearer, requireRole } from './server.ts'
 
-const Login = z.object({ username: z.string().trim().min(1).max(100), password: z.string().min(1).max(200) })
+// takeOver: sign the other user of this device out first (one device, one user; see AuthService.login).
+const Login = z.object({ username: z.string().trim().min(1).max(100), password: z.string().min(1).max(200), takeOver: z.boolean().optional() })
 const ChangePassword = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z.string().min(8, 'Password baru minimal 8 karakter').max(200),
@@ -53,14 +54,15 @@ export function registerAuthRoutes(app: FastifyInstance, k: Pick<Container, 'aut
   })
   app.post('/api/auth/login', async (req, reply) => {
     const b = Login.parse(req.body)
-    const a = k.loginLimiter.attempt(clientIp(req), b.username)
+    const ip = clientIp(req)
+    const a = k.loginLimiter.attempt(ip, b.username)
     if (!a.ok) {
       k.log.warn({ username: b.username.slice(0, 64), retryAfterSec: a.retryAfterSec, reason: a.reason }, 'login throttled')
       reply.header('Retry-After', String(a.retryAfterSec))
       throw new AppError(429, 'TOO_MANY_ATTEMPTS', `Terlalu banyak percobaan masuk. Coba lagi dalam ${Math.ceil(a.retryAfterSec / 60)} menit.`)
     }
     try {
-      const session = await k.auth.login(b.username, b.password)
+      const session = await k.auth.login(b.username, b.password, { ip, takeOver: b.takeOver === true })
       k.loginLimiter.settle(a.ticket, 'success')
       return { ...session, user: await withMenus(session.user) }
     } catch (e) {
@@ -237,7 +239,10 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
   /** Datasets in the shape the Analysis page uses; a source that cannot be reached is flagged, not hidden. */
   app.get('/api/dw/catalog', async (req) => {
     const u = requireRole(req)
-    const list = (await k.datasets.list()).filter((d) => d.status === 'active')
+    // Datasets and their organization validations in two queries, whatever the number of datasets: the catalog is
+    // asked for by every Analisis page, and one metadata query per dataset queued behind the small metadata pool.
+    const list = await k.datasets.activeRecords()
+    const validations = await k.dataAccess.validationsOf(list.map((d) => d.id))
     // One scope for the whole catalog; a refused dataset is listed with its reason and without any data.
     let scope: AccessScope | null = null
     let scopeError: AppError | null = null
@@ -248,16 +253,16 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
       scopeError = e
     }
     const datasets = await Promise.all(
-      list.map(async (s) => {
-        const d = await k.datasets.get(s.id)
+      list.map(async (d) => {
+        const validation = validations.get(d.id) ?? null
         let coverage: { from: string; to: string } | null = null
         let error: { code: string; message: string } | null = null
         let access: { status: 'ok' | 'partial' | 'denied'; code: string | null; message: string | null; notify: boolean; unmappedShare: number | null } = { status: 'ok', code: null, message: null, notify: false, unmappedShare: null }
         try {
           if (scopeError) throw scopeError
           // Listing is not an access attempt: decided here without a denial audit (data endpoints audit their refusals).
-          const rows = forDataset(scope!, d, await k.dataAccess.validationOf(d.id))
-          if (rows.kind === 'rows' && rows.status === 'PARTIAL') access = { ...access, status: 'partial', unmappedShare: (await k.dataAccess.validationOf(d.id))?.detail.unmappedShare ?? null }
+          const rows = forDataset(scope!, d, validation)
+          if (rows.kind === 'rows' && rows.status === 'PARTIAL') access = { ...access, status: 'partial', unmappedShare: validation?.detail.unmappedShare ?? null }
           try {
             coverage = await k.datasets.coverage(d, rows, req.abort)
           } catch (e) {

@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import type { Config } from '../config/config.ts'
 import type { MetadataDb } from '../db/metadataDb.ts'
 import { AppError, unauthenticated } from '../http/errors.ts'
+import { rollback } from '../db/connection.ts'
 import type { Logger } from '../log/logger.ts'
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>
@@ -34,6 +35,10 @@ async function verifyPassword(pw: string, stored: string): Promise<boolean> {
 }
 
 const hashToken = (t: string) => createHash('sha256').update(t).digest('hex')
+
+/** Same wording as the browser's own check (src/stores/deviceSession.ts). */
+export const deviceInUseMessage = (holder: { name: string; username: string }) =>
+  `Perangkat ini sedang dipakai oleh ${holder.name || holder.username} (${holder.username}). Keluarkan akun tersebut dari perangkat ini sebelum masuk dengan akun lain.`
 
 export class AuthService {
   private readonly db: MetadataDb
@@ -66,7 +71,14 @@ export class AuthService {
     this.log.info({ username: this.config.auth.adminUsername }, 'initial administrator created')
   }
 
-  async login(username: string, password: string) {
+  /**
+   * Signs in. One device, one user: `device.ip` is the client address (clientIp(), trusted-proxy aware). While another
+   * user holds a valid session opened from that address, the sign-in is refused with DEVICE_IN_USE, checked only
+   * after the password is proven, so the holder's name is never shown to someone without valid credentials. With
+   * `takeOver` the holder's sessions from that address end (audited) and the sign-in goes ahead. The same user may
+   * sign in again from the address (another browser). An unknown address is not bound to a device.
+   */
+  async login(username: string, password: string, device: { ip?: string | null; takeOver?: boolean } = {}) {
     const { rows } = await this.db.query<User & { password_hash: string; active: boolean }>('SELECT id, username, name, role, password_hash, active FROM dor_user WHERE lower(username) = lower($1)', [username.trim()])
     const u = rows[0]
     // Always run a hash comparison so response time does not reveal whether the user exists.
@@ -75,11 +87,47 @@ export class AuthService {
       this.log.info({ username: username.trim().slice(0, 64), reason: !u ? 'unknown_user' : !u.active ? 'inactive' : 'bad_password' }, 'login rejected')
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Username atau password salah.')
     }
+    const ip = device.ip && device.ip !== 'unknown' ? device.ip : null
     const token = randomBytes(32).toString('base64url')
     const expiresAt = new Date(Date.now() + this.config.auth.sessionHours * 3600e3)
-    await this.db.query('INSERT INTO dor_session (token_hash, user_id, expires_at) VALUES ($1,$2,$3)', [hashToken(token), u.id, expiresAt])
+    // Check and session insert are one transaction under a per-address lock: two users signing in from one device
+    // at the same moment cannot both pass the check.
+    const client = await this.db.pool.connect()
+    let broken: Error | undefined
+    try {
+      await client.query('BEGIN')
+      if (ip) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`dod.device|${ip}`])
+        const held = await client.query<{ id: string; username: string; name: string }>(
+          `SELECT DISTINCT u.id, u.username, u.name FROM dor_session s JOIN dor_user u ON u.id = s.user_id
+            WHERE s.client_ip = $1 AND s.user_id <> $2 AND s.expires_at > now() AND u.active ORDER BY u.username`,
+          [ip, u.id],
+        )
+        const holder = held.rows[0]
+        if (holder && !device.takeOver) {
+          this.log.info({ username: u.username, holder: holder.username }, 'login refused: device in use')
+          throw new AppError(409, 'DEVICE_IN_USE', deviceInUseMessage(holder))
+        }
+        if (holder) {
+          const ended = await client.query('DELETE FROM dor_session WHERE client_ip = $1 AND user_id <> $2', [ip, u.id])
+          await client.query('INSERT INTO dor_audit (user_id, action, detail) VALUES ($1, $2, $3)', [
+            u.id,
+            'auth.device_takeover',
+            JSON.stringify({ signedOut: held.rows.map((h) => h.id), sessionsEnded: ended.rowCount ?? 0 }),
+          ])
+          this.log.info({ username: u.username, signedOut: held.rows.map((h) => h.username) }, 'device taken over')
+        }
+      }
+      await client.query('INSERT INTO dor_session (token_hash, user_id, expires_at, client_ip) VALUES ($1,$2,$3,$4)', [hashToken(token), u.id, expiresAt, ip])
+      await client.query('INSERT INTO dor_audit (user_id, action) VALUES ($1, $2)', [u.id, 'auth.login'])
+      await client.query('COMMIT')
+    } catch (e) {
+      broken = await rollback(client, e)
+      throw e
+    } finally {
+      client.release(broken)
+    }
     await this.db.query('DELETE FROM dor_session WHERE expires_at < now()')
-    await this.db.query('INSERT INTO dor_audit (user_id, action) VALUES ($1, $2)', [u.id, 'auth.login'])
     const user: User = { id: u.id, username: u.username, name: u.name, role: u.role }
     return { token, expiresAt: expiresAt.toISOString(), user }
   }

@@ -122,6 +122,18 @@ export class DataAccessService {
     return r ? { status: r.status, datasetUpdatedAt: r.dataset_updated_at.toISOString(), checkedAt: r.checked_at.toISOString(), detail: r.detail } : null
   }
 
+  /** validationOf() of several datasets in one query (the catalog), by dataset id; a dataset without one is absent. */
+  async validationsOf(datasetIds: string[]): Promise<Map<string, NonNullable<Awaited<ReturnType<DataAccessService['validationOf']>>>>> {
+    const out = new Map<string, NonNullable<Awaited<ReturnType<DataAccessService['validationOf']>>>>()
+    if (!datasetIds.length) return out
+    const { rows } = await this.db.query<{ dataset_id: string; status: ValidationStatus; dataset_updated_at: Date; checked_at: Date; detail: ValidationResult }>(
+      'SELECT dataset_id, status, dataset_updated_at, checked_at, detail FROM dor_dataset_org_validation WHERE dataset_id = ANY($1)',
+      [datasetIds],
+    )
+    for (const r of rows) out.set(r.dataset_id, { status: r.status, datasetUpdatedAt: r.dataset_updated_at.toISOString(), checkedAt: r.checked_at.toISOString(), detail: r.detail })
+    return out
+  }
+
   /** Scope + dataset → what the user may see of it. Denials are audited (throttled). */
   async rowScope(u: User, d: DatasetRecord): Promise<{ scope: AccessScope; rows: RowScope }> {
     try {

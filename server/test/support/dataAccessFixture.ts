@@ -169,6 +169,11 @@ export function fakeDb(): FakeDb {
       const v = f.validations.get(params[0] as string)
       return { rows: v ? [v] : [], rowCount: v ? 1 : 0 }
     }
+    // validationsOf(): several datasets in one query (the catalog).
+    if (s.startsWith('SELECT dataset_id, status, dataset_updated_at')) {
+      const rows = (params[0] as string[]).flatMap((id) => { const v = f.validations.get(id); return v ? [{ dataset_id: id, ...v }] : [] })
+      return { rows, rowCount: rows.length }
+    }
     if (s.startsWith('INSERT INTO dor_audit')) {
       f.audit.push({ user_id: params[0] as string | null, action: params[1] as string, target: params[2] as string, detail: params[3] ? JSON.parse(params[3] as string) : null })
       return { rows: [], rowCount: 1 }

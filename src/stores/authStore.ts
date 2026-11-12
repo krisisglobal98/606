@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { configureApiClient } from '@/services/api/apiClient'
+import { ApiError, configureApiClient } from '@/services/api/apiClient'
 import { authService } from '@/services/auth/authService'
 import { resetSessionCaches } from '@/services/session/sessionCaches'
 import type { LoginRequest, User } from '@/types/contracts'
+import { AUTH_KEY, deviceHolder, deviceInUseMessage, readStoredSession } from './deviceSession'
 
 interface AuthState {
   token: string | null
@@ -23,6 +24,14 @@ export const useAuthStore = create<AuthState>()(
       expiresAt: null,
       user: null,
       login: async (req) => {
+        // One device, one user: another user signed in on this browser (e.g. in another tab) must sign out first;
+        // with takeOver they are signed out here. The server checks the other browsers of the device.
+        const holder = deviceHolder(readStoredSession(localStorage.getItem(AUTH_KEY)), req.username)
+        if (holder && !req.takeOver) throw new ApiError(409, 'DEVICE_IN_USE', deviceInUseMessage(holder))
+        if (holder) {
+          await useAuthStore.persist.rehydrate()
+          await get().logout()
+        }
         const s = await authService.login(req)
         set({ token: s.token, expiresAt: s.expiresAt, user: s.user })
         return s.user
@@ -41,7 +50,7 @@ export const useAuthStore = create<AuthState>()(
       },
       clear: () => set({ token: null, expiresAt: null, user: null }),
     }),
-    { name: 'dod.auth', partialize: (s) => ({ token: s.token, expiresAt: s.expiresAt, user: s.user }) },
+    { name: AUTH_KEY, partialize: (s) => ({ token: s.token, expiresAt: s.expiresAt, user: s.user }) },
   ),
 )
 

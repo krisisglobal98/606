@@ -481,6 +481,7 @@ export const en: Record<string, string> = {
   "Keluar": "Sign out",
   "Keluar Fokus": "Exit Focus",
   "Keluar dari Fokus Tabel (Esc)": "Exit Table Focus (Esc)",
+  "Keluarkan akun tersebut dan masuk": "Sign that account out and sign in",
   "Keluhan / pekerjaan": "Complaint / job",
   "Kembali ke Analisis": "Back to Analysis",
   "Kembali ke Settings": "Back to Settings",

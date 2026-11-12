@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
@@ -17,8 +17,23 @@ export default defineConfig(({ mode }) => {
   if (!csp) throw new Error('public/web.config: Content-Security-Policy not found')
   const headers = { 'Content-Security-Policy': csp, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN' }
 
+  // Hashed build files (/assets/*) never change, so `vite preview` caches them like IIS does (public/web.config:
+  // 365 days). Its file server would otherwise send `no-cache`, and every page load revalidates each file again.
+  const previewAssetCache: Plugin = {
+    name: 'dod-preview-asset-cache',
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.startsWith('/assets/')) {
+          const setHeader = res.setHeader.bind(res)
+          res.setHeader = (name, value) => setHeader(name, name.toLowerCase() === 'cache-control' ? 'public, max-age=31536000, immutable' : value)
+        }
+        next()
+      })
+    },
+  }
+
   return {
-    plugins: [react()],
+    plugins: [react(), previewAssetCache],
     // Fixed ports (5180 dev, 8100 preview), never silently moved to another one: DOD Minimal runs next to other
     // local web apps. `--port` on the command line (scripts/run.ps1 -Port) still overrides them.
     server: { port: 5180, strictPort: true, proxy },
@@ -31,8 +46,13 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
+          // Shared code goes in a few chunks instead of dozens of 1 KB files (one per icon or small component): on a
+          // slow or high-latency connection every extra file costs a round trip, and pages wait for them in waves.
           manualChunks(id) {
             if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) return 'echarts'
+            if (id.includes('node_modules/lucide-react')) return 'icons'
+            // components/charts stays out: it imports ECharts, which must load only with a chart (not at sign-in).
+            if (/[\\/]src[\\/](components|hooks|utils)[\\/]/.test(id) && !/[\\/]components[\\/]charts[\\/]/.test(id)) return 'ui'
             return undefined
           },
         },

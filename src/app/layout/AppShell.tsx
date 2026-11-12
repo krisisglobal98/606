@@ -36,17 +36,22 @@ export function AppShell() {
   const navigate = useNavigate()
   const refresh = useAuthStore((st) => st.refresh)
 
-  // Menu permissions may change while a session lasts: reload the user on start and when the tab is shown again.
+  // Menu permissions may change while a session lasts, and the session may end elsewhere (another user taking over
+  // this device from another browser): reload the user on start and when the tab or window is shown or focused again.
   useEffect(() => {
     let last = 0
     const run = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - last < 60_000) return
+      if (document.visibilityState !== 'visible' || Date.now() - last < 15_000) return
       last = Date.now()
       void refresh().catch(() => undefined)
     }
     run()
     document.addEventListener('visibilitychange', run)
-    return () => document.removeEventListener('visibilitychange', run)
+    window.addEventListener('focus', run)
+    return () => {
+      document.removeEventListener('visibilitychange', run)
+      window.removeEventListener('focus', run)
+    }
   }, [refresh])
 
   const onLogout = async () => {
