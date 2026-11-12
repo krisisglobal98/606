@@ -74,7 +74,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\Install-Prerequisites.ps1
 
 # 2. Pemasangan pertama: membuat D:\DODMinimal\config\dod.env dari template lalu berhenti
-.\Deploy-DOD.ps1 -Zip C:\Temp\dodmin-0.1.5-abc1234.zip
+#    (-Nssm wajib sejak langkah ini bila nssm.exe tidak ada di PATH)
+.\Deploy-DOD.ps1 -Zip C:\Temp\dodmin-0.1.5-abc1234.zip -Nssm C:\Tools\nssm\nssm.exe
 notepad D:\DODMinimal\config\dod.env      # isi nilainya; lihat tabel di bawah
 
 # 3. Jalankan lagi: pasang service DODMIN-API, situs IIS DODMIN, ARR
