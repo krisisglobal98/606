@@ -63,8 +63,23 @@ describe('forDataset', () => {
     refuse(() => forDataset({ kind: 'none', reason: 'NO_ASSIGNMENT', problems: [], fingerprint: 'none' }, dataset('d'), ok), 'SCOPE_UNRESOLVED')
   })
   test('non-standard datasets return no data for every level', () => {
-    for (const [m, v, status] of [[nonPims(), ok, 'NONPIMS'], [noBu(), ok, 'NONE'], [model(), null, 'UNVERIFIED'], [budgetWithoutBu(), ok, 'NONE'], [model(), { status: 'failed' as const, datasetUpdatedAt: UPDATED }, 'FAILED']] as const)
+    for (const [m, v, status] of [[nonPims(), ok, 'NONPIMS'], [model(), null, 'UNVERIFIED'], [model(), { status: 'failed' as const, datasetUpdatedAt: UPDATED }, 'FAILED']] as const)
       refuse(() => forDataset(scoped(SAM1), dataset('d', m), v), 'DATASET_NOT_STANDARD', (d) => assert.equal(d.status, status))
+  })
+  test('no Unit Operasional column (in the dataset or one source): ACCESS_FIELD_MISSING, notified, for every level', () => {
+    const levels = [SAM1, { level: 'GMK' as const, orgKind: 'ms_gmk_header' as const, orgId: ID.GMK1 }, { level: 'RAYON' as const, orgKind: 'ms_businessunit' as const, orgId: ID.SAM1, subKind: 'ms_rayon' as const, subId: ID.RAYON_A }]
+    for (const m of [noBu(), budgetWithoutBu()])
+      for (const a of levels)
+        assert.throws(() => forDataset(scoped(a), dataset('d', m), ok), (e) => e instanceof AppError && e.code === 'ACCESS_FIELD_MISSING' && e.status === 403 && /field Unit Operasional .*tidak memiliki otoritas/.test(e.message) && (e.details as { notify: boolean }).notify === true, a.level)
+  })
+  test('Rayon / Divisi grant on a dataset without that column: ACCESS_FIELD_MISSING (never the whole unit)', () => {
+    const noRay = model({ dimensions: model().dimensions.filter((d) => d.id !== 'ray') })
+    const noAfd = model({ dimensions: model().dimensions.filter((d) => d.id !== 'afdeling') })
+    assert.throws(() => forDataset(scoped({ level: 'RAYON', orgKind: 'ms_businessunit', orgId: ID.SAM1, subKind: 'ms_rayon', subId: ID.RAYON_A }), dataset('d', noRay), ok), (e) => e instanceof AppError && e.code === 'ACCESS_FIELD_MISSING' && /field Rayon/.test(e.message))
+    assert.throws(() => forDataset(scoped({ level: 'DIVISION', orgKind: 'ms_businessunit', orgId: ID.SAM1, subKind: 'ms_division', subId: ID.DIV01 }), dataset('d', noAfd), ok), (e) => e instanceof AppError && e.code === 'ACCESS_FIELD_MISSING' && /field Divisi/.test(e.message))
+    // With another grant that does apply, that one still gives its rows; the rayon grant adds nothing.
+    const r = forDataset(scoped({ level: 'RAYON', orgKind: 'ms_businessunit', orgId: ID.SAM1, subKind: 'ms_rayon', subId: ID.RAYON_A }, { level: 'BUSINESS_UNIT', orgKind: 'ms_businessunit', orgId: ID.SAM2 }), dataset('d', noRay), ok) as Extract<RowScope, { kind: 'rows' }>
+    assert.deepEqual(r.grants.map((g) => g.level), ['BUSINESS_UNIT'])
   })
   test('notification: levels 1–4, 6, 7 get the "tabel belum standar" text; GMK, Rayon, Divisi do not', () => {
     const notified = [
@@ -76,18 +91,18 @@ describe('forDataset', () => {
       SAM1,
     ]
     for (const a of notified)
-      assert.throws(() => forDataset(scoped(a), dataset('d', noBu()), ok), (e) => e instanceof AppError && e.message === NOT_STANDARD_MESSAGE && (e.details as { notify: boolean }).notify === true, a.level)
+      assert.throws(() => forDataset(scoped(a), dataset('d', nonPims()), ok), (e) => e instanceof AppError && e.message === NOT_STANDARD_MESSAGE && (e.details as { notify: boolean }).notify === true, a.level)
     const silent = [
       { level: 'GMK' as const, orgKind: 'ms_gmk_header' as const, orgId: ID.GMK1 },
       { level: 'RAYON' as const, orgKind: 'ms_businessunit' as const, orgId: ID.SAM1, subKind: 'ms_rayon' as const, subId: ID.RAYON_A },
       { level: 'DIVISION' as const, orgKind: 'ms_businessunit' as const, orgId: ID.SAM1, subKind: 'ms_division' as const, subId: ID.DIV01 },
     ]
     for (const a of silent)
-      assert.throws(() => forDataset(scoped(a), dataset('d', noBu()), ok), (e) => e instanceof AppError && e.code === 'DATASET_NOT_STANDARD' && e.message !== NOT_STANDARD_MESSAGE && (e.details as { notify: boolean }).notify === false, a.level)
+      assert.throws(() => forDataset(scoped(a), dataset('d', nonPims()), ok), (e) => e instanceof AppError && e.code === 'DATASET_NOT_STANDARD' && e.message !== NOT_STANDARD_MESSAGE && (e.details as { notify: boolean }).notify === false, a.level)
   })
-  test('Kepemilikan on a dataset without an ownership column: no data, notified (level 1)', () => {
+  test('Kepemilikan on a dataset without an ownership column: no data, notified (field missing)', () => {
     const m = model({ dimensions: model().dimensions.filter((d) => d.id !== 'kepemilikan') })
-    refuse(() => forDataset(scoped({ level: 'OWNERSHIP', orgLevel: 'GROUP', orgKind: 'ms_group', orgId: ID.FRG, ownership: ['INTI'] }), dataset('d', m), ok), 'DATASET_NOT_STANDARD', (d) => assert.equal(d.notify, true))
+    refuse(() => forDataset(scoped({ level: 'OWNERSHIP', orgLevel: 'GROUP', orgKind: 'ms_group', orgId: ID.FRG, ownership: ['INTI'] }), dataset('d', m), ok), 'ACCESS_FIELD_MISSING', (d) => assert.equal(d.notify, true))
   })
   test('OK and PARTIAL datasets are usable', () => {
     assert.equal(forDataset(scoped(SAM1), dataset('d'), ok).kind, 'rows')

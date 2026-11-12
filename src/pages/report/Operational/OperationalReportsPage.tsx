@@ -213,7 +213,7 @@ export default function OperationalReportsPage() {
               </Card>
             )}
             {dataset && active ? (
-              <SavedReportGrid key={current.id} report={current} dataset={dataset} filter={active.filter} scope={active.scope} focus={focus} onToggleFocus={() => setFocus((f) => !f)} />
+              <SavedReportGrid key={current.id} report={current} dataset={dataset} filter={active.filter} scope={active.scope} focus={focus} onToggleFocus={() => setFocus((f) => !f)} onChangeFilter={() => setFilterOpen(true)} />
             ) : (
               <Card><EmptyState title={tr('Dataset laporan ini tidak tersedia')} message={tr('Dataset yang dipakai laporan ini sudah dihapus atau diarsipkan, jadi tabelnya tidak dapat ditampilkan.')} /></Card>
             )}

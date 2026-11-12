@@ -138,7 +138,11 @@ export function ResultChart({ result, status, refreshing, error, onRetry, datase
       error={error}
       onRetry={onRetry}
       isEmpty={isEmpty}
-      emptyMessage={tr('Tidak ada data yang cocok dengan Pengaturan Data dan filter. Longgarkan pilihan untuk melihat hasil.')}
+      emptyMessage={
+        result?.summary.periodLabel
+          ? tr('Data tidak tersedia untuk periode {0}. Ubah rentang tanggal atau filter data untuk menampilkan grafik.', result.summary.periodLabel)
+          : tr('Data tidak tersedia untuk filter saat ini. Ubah rentang tanggal atau filter data untuk menampilkan grafik.')
+      }
       option={option}
       height={300}
       ariaLabel={tr('Grafik hasil analisis')}

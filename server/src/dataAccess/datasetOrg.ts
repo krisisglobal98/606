@@ -53,7 +53,8 @@ export interface DatasetOrgProfile {
   division: OrgDim | 'ambiguous' | null
   ownership: OrgDim | 'ambiguous' | null
   /** NONPIMS / NONE reason when there is no usable BU; null when the BU parameter is structurally fine. */
-  standardProblem: { status: 'NONPIMS' | 'NONE'; message: string } | null
+  /** missingField: the Unit Operasional column is absent (in the dataset or in one of its sources), not just unusable. */
+  standardProblem: { status: 'NONPIMS' | 'NONE'; message: string; missingField?: boolean } | null
 }
 
 export function datasetOrgProfile(m: SemanticModel): DatasetOrgProfile {
@@ -82,11 +83,11 @@ export function datasetOrgProfile(m: SemanticModel): DatasetOrgProfile {
   } else if (businessUnit && aliases.some((a) => !businessUnit!.forms[a])) {
     // Every source must be restricted; a source without BU would bring unfiltered rows through the FULL JOIN.
     businessUnit = null
-    standardProblem = { status: 'NONE', message: 'Salah satu sumber dataset tidak memiliki kolom Unit Operasional (business_unit / kodebisnisunit).' }
+    standardProblem = { status: 'NONE', message: 'Salah satu sumber dataset tidak memiliki kolom Unit Operasional (business_unit / kodebisnisunit).', missingField: true }
   } else if (!businessUnit) {
     standardProblem = nonPims
       ? { status: 'NONPIMS', message: 'Kolom unit pada dataset ini bukan kode Unit Operasional PIMS.' }
-      : { status: 'NONE', message: 'Dataset tidak memiliki kolom Unit Operasional (business_unit / kodebisnisunit).' }
+      : { status: 'NONE', message: 'Dataset tidak memiliki kolom Unit Operasional (business_unit / kodebisnisunit).', missingField: true }
   }
   return { businessUnit, group: one('group'), region: one('region'), company: one('company'), rayon: oneOrAmbiguous('rayon'), division: oneOrAmbiguous('division'), ownership: oneOrAmbiguous('ownership'), standardProblem }
 }

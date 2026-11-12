@@ -17,7 +17,7 @@ import { tr } from '@/i18n'
  * the figures come from the source, and the Analysis page's own state is left alone. The filters are the page's
  * (the saved ones until the user applies others in the filter modal).
  */
-export function SavedReportGrid({ report, dataset, filter, scope, focus, onToggleFocus }: { report: SavedReport; dataset: Dataset; filter: Filter; scope: DataScope; focus: boolean; onToggleFocus: () => void }) {
+export function SavedReportGrid({ report, dataset, filter, scope, focus, onToggleFocus, onChangeFilter }: { report: SavedReport; dataset: Dataset; filter: Filter; scope: DataScope; focus: boolean; onToggleFocus: () => void; onChangeFilter?: () => void }) {
   const l = report.layout
   const engine = useMemo(() => createEngine(dataset, l.calc as CalcMeasure[]), [dataset, l.calc])
   const fields = useMemo(() => new Map([...dataset.fields, ...engine.extraFields].map((f) => [f.id, f])), [dataset, engine])
@@ -36,7 +36,7 @@ export function SavedReportGrid({ report, dataset, filter, scope, focus, onToggl
     : null
   const hier = useHierarchy(query, withCounts)
   return query ? (
-    <PivotGrid hier={hier} engine={engine} dims={dims} periodLabel={`${formatDate(filter.dateFrom)} – ${formatDate(filter.dateTo)}`} focus={focus} onToggleFocus={onToggleFocus} state={state} />
+    <PivotGrid hier={hier} engine={engine} dims={dims} periodLabel={`${formatDate(filter.dateFrom)} – ${formatDate(filter.dateTo)}`} focus={focus} onToggleFocus={onToggleFocus} state={state} onChangeFilter={onChangeFilter} />
   ) : (
     <Card><EmptyState title={tr('Laporan ini tidak punya measure')} message={tr('Measure yang disimpan sudah tidak ada di dataset.')} /></Card>
   )

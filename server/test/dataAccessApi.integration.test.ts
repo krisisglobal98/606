@@ -133,9 +133,9 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
     assert.deepEqual(await totals('own'), { actual: 180, budget: null, units: ['CLP-1', 'SAM-1', 'SAM-2'] })
   })
 
-  test('Rayon / Divisi: filtered by the field where it exists; the budget source (no field) falls back to the parent BU only', async () => {
-    assert.deepEqual(await totals('rayon'), { actual: 10, budget: 100, units: ['SAM-1'] })
-    assert.deepEqual(await totals('div'), { actual: 20, budget: 100, units: ['SAM-1'] })
+  test('Rayon / Divisi: filtered by the field where it exists; the budget source (no field) gives nothing (never the parent BU)', async () => {
+    assert.deepEqual(await totals('rayon'), { actual: 10, budget: null, units: ['SAM-1'] })
+    assert.deepEqual(await totals('div'), { actual: 20, budget: null, units: ['SAM-1'] })
   })
 
   test('multiple assignments: a union of the grants (SAM-1 + GMK 1 = SAM-1, BHP-1)', async () => {
@@ -161,15 +161,23 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
     }
   })
 
-  test('non-standard datasets return no data: NONE, NONPIMS, UNVERIFIED; notification only for levels 1–4, 6, 7', async () => {
-    for (const id of ['ds-none', 'ds-nonpims', 'ds-unverified']) {
+  test('non-standard datasets return no data: NONPIMS, UNVERIFIED; notification only for levels 1–4, 6, 7', async () => {
+    for (const id of ['ds-nonpims', 'ds-unverified']) {
       const r = await query('sam1', id, { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
       assert.deepEqual([r.status, r.body.error.code, r.body.error.details.notify], [409, 'DATASET_NOT_STANDARD', true], id)
       assert.match(r.body.error.message, /Tabel belum standar dan tidak memiliki parameter default/)
     }
-    const g = await query('gmk', 'ds-none', { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
+    const g = await query('gmk', 'ds-nonpims', { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
     assert.deepEqual([g.status, g.body.error.details.notify], [409, false])
     assert.doesNotMatch(g.body.error.message, /parameter default/)
+  })
+
+  test('no Unit Operasional column (NONE): 403 ACCESS_FIELD_MISSING with the field and authority notice, for every level', async () => {
+    for (const t of ['sam1', 'gmk', 'rayon']) {
+      const r = await query(t, 'ds-none', { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
+      assert.deepEqual([r.status, r.body.error.code, r.body.error.details.notify], [403, 'ACCESS_FIELD_MISSING', true], t)
+      assert.match(r.body.error.message, /field Unit Operasional .*tidak memiliki otoritas/)
+    }
   })
 
   test('request manipulation cannot widen the scope (scope, filter, drilldown path)', async () => {

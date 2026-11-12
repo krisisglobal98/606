@@ -31,8 +31,10 @@ Prinsip:
 | 5 | GMK | `ms_gmk_header.id` dari daftar `DOD_ORG_GMK_HEADER_IDS` | BU `ms_gmk_detail` |
 | 6 | Perusahaan | `ms_company.id` | BU dengan `company_id` itu |
 | 7 | Unit Operasional | `ms_businessunit.id` | BU itu |
-| 8 | Rayon | pasangan (`ms_businessunit.id`, `ms_rayon.id`) | BU itu **AND** kolom rayon. Tanpa kolom rayon: BU itu saja |
-| 9 | Divisi | pasangan (`ms_businessunit.id`, `ms_division.id`) | BU itu **AND** kolom divisi. Tanpa kolom divisi: BU itu saja |
+| 8 | Rayon | pasangan (`ms_businessunit.id`, `ms_rayon.id`) | BU itu **AND** kolom rayon. Tanpa kolom rayon: **tidak ada data** (notifikasi field tidak lengkap) |
+| 9 | Divisi | pasangan (`ms_businessunit.id`, `ms_division.id`) | BU itu **AND** kolom divisi. Tanpa kolom divisi: **tidak ada data** (notifikasi field tidak lengkap) |
+
+**Field tidak lengkap (keputusan pemilik 2026-11-12).** Bila dataset tidak memiliki kolom yang menjadi dasar level akses pengguna (Unit Operasional untuk semua level; Kepemilikan, Rayon, atau Divisi untuk level itu), data tidak ditampilkan dan pengguna mendapat notifikasi `403 ACCESS_FIELD_MISSING`: "Data tidak dapat dilihat karena field … pada dataset ini tidak lengkap, sehingga Anda tidak memiliki otoritas untuk melihat data ini." Tidak pernah ada pelebaran ke unit induk. Pada dataset multi-sumber, sumber yang tidak memiliki kolom rayon/divisi tidak memberi baris untuk grant Rayon/Divisi (mis. kolom budget kosong). Grant lain milik pengguna yang kolomnya ada tetap berlaku.
 
 Aturan:
 - **Satu pengguna, banyak assignment.** Hasilnya gabungan grant. Bagian-bagian grant **tidak pernah dicampur**: FRG+PLASMA dan SAM+INTI tidak menghasilkan FRG+INTI.
@@ -52,7 +54,7 @@ Status per dataset dihitung otomatis dari model semantiknya (`server/src/dataAcc
 | UNVERIFIED | belum ada validasi untuk versi dataset ini (`updated_at`) | tidak ada data |
 | FAILED | tidak satu pun nilai BU cocok dengan master | tidak ada data |
 | NONPIMS | kolom unit bukan kode PIMS (`kebun_id`, `unit_id`, …) | tidak ada data |
-| NONE | tanpa kolom BU, atau salah satu sumber tanpa BU | tidak ada data |
+| NONE | tanpa kolom BU, atau salah satu sumber tanpa BU | tidak ada data; notifikasi field tidak lengkap (`ACCESS_FIELD_MISSING`) untuk semua level |
 
 - **Konsistensi (K-09).** Kolom Group (`groupcode`), Region (`regioncode`), dan Company (`company` = alias, `companycodeora` = kode Oracle) yang ada di suatu sumber wajib cocok dengan master untuk BU baris itu. Baris yang tidak cocok tersembunyi; nilai NULL tidak diperiksa.
 - **Notifikasi.** Untuk level 1–4, 6, dan 7: *"Tabel belum standar dan tidak memiliki parameter default untuk pembatasan akses data."* Untuk level 5, 8, dan 9: *"Data tidak tersedia untuk cakupan akses Anda."*

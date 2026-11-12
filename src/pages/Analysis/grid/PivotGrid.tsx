@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Download, Maximize2, Minimize2, MoreHorizontal, Paintbrush, Pin, PinOff, Settings2, Snowflake } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Download, Filter as FilterIcon, Maximize2, Minimize2, MoreHorizontal, Paintbrush, Pin, PinOff, Settings2, Snowflake } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { Dropdown } from '@/components/common/Dropdown'
@@ -45,6 +45,24 @@ interface Props {
   titleInfo?: ReactNode
   /** The table's layout and options when it is not the Analysis page's own (a saved report). */
   state?: GridState
+  /** Opens the page's filter: offered when the period and filters return no data. */
+  onChangeFilter?: () => void
+}
+
+/** No row for the period and filters: say so, with the period, and point the user to the filter. */
+export function NoDataForPeriod({ periodLabel, onChangeFilter, height }: { periodLabel: string | null; onChangeFilter?: () => void; height?: number }) {
+  return (
+    <EmptyState
+      title={tr('Data tidak tersedia untuk periode filter')}
+      message={
+        periodLabel
+          ? tr('Tidak ada data pada periode {0}. Ubah rentang tanggal atau filter data untuk menampilkan laporan.', periodLabel)
+          : tr('Tidak ada data untuk filter saat ini. Ubah rentang tanggal atau filter data untuk menampilkan laporan.')
+      }
+      action={onChangeFilter ? <Button size="sm" icon={<FilterIcon size={14} aria-hidden />} onClick={onChangeFilter}>{tr('Ubah filter')}</Button> : undefined}
+      height={height}
+    />
+  )
 }
 
 /**
@@ -57,7 +75,7 @@ interface Props {
  *   calculations); with no configuration every measure is one plain column.
  * - Rows are virtualised, so only the visible window is in the DOM.
  */
-export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocus, titleInfo, state }: Props) {
+export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocus, titleInfo, state, onChangeFilter }: Props) {
   const storeTable = useAnalysisStore((st) => st.table)
   const storeSetTable = useAnalysisStore((st) => st.setTable)
   const storeLayout = useAnalysisStore((st) => st.measureLayout)
@@ -325,7 +343,7 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
       </div>
     )
   else if (hier.status === 'error') body = <ErrorState message={hier.error ?? tr('')} onRetry={hier.reload} />
-  else if (!hier.roots.length && !(total && !dims.length)) body = <EmptyState title={tr('Tidak ada baris')} message={tr('Tidak ada data yang cocok dengan pilihan saat ini.')} />
+  else if (!hier.roots.length && !(total && !dims.length)) body = <NoDataForPeriod periodLabel={periodLabel} onChangeFilter={onChangeFilter} />
   else {
     const hdrRows = header.rows.length
     body = (

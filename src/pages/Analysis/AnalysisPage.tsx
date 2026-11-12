@@ -400,7 +400,7 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
             {profile}
             {/* Data Profil and Tabel Hasil take turns: opening the profile collapses the table, collapsing it brings the table back. */}
             <div id="panel-table" className={s.tableSlot} hidden={!focus && profileOpen}>
-              {engine && <PivotGrid hier={hier} engine={engine} dims={dimensions} periodLabel={result?.summary.periodLabel ?? null} titleInfo={tableInfo} focus={focus} onToggleFocus={() => (focus ? setFocus(false) : enterFocus())} />}
+              {engine && <PivotGrid hier={hier} engine={engine} dims={dimensions} periodLabel={result?.summary.periodLabel ?? null} titleInfo={tableInfo} focus={focus} onToggleFocus={() => (focus ? setFocus(false) : enterFocus())} onChangeFilter={() => setFilterOpen(true)} />}
             </div>
           </>
         )}

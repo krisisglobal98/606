@@ -42,6 +42,20 @@ export function notStandard(notify: boolean, status: DatasetOrgStatus | 'NO_APPL
   return e
 }
 
+/**
+ * The dataset lacks a column the user's access level is defined by (Unit Operasional, Kepemilikan, Rayon, Divisi):
+ * the rows cannot be narrowed to that level, so the user has no authority to see them. Always notified (owner's
+ * decision 2026-11-12), for every level.
+ */
+export function fieldMissing(fields: string[]): AppError {
+  const list = [...new Set(fields)].join(', ')
+  const e = new AppError(403, 'ACCESS_FIELD_MISSING', `Data tidak dapat dilihat karena field ${list} pada dataset ini tidak lengkap, sehingga Anda tidak memiliki otoritas untuk melihat data ini.`)
+  e.details = { notify: true, missing: [...new Set(fields)] }
+  return e
+}
+
+const usable = (dim: OrgDim | 'ambiguous' | null): dim is OrgDim => !!dim && dim !== 'ambiguous'
+
 /** Decides what of a dataset a scope may see. Throws instead of returning an unrestricted scope by mistake. */
 export function forDataset(scope: AccessScope, d: DatasetRecord, validation: { status: ValidationStatus; datasetUpdatedAt: string } | null): RowScope {
   if (scope.kind === 'unrestricted') return { kind: 'all', fingerprint: 'all' }
@@ -49,23 +63,22 @@ export function forDataset(scope: AccessScope, d: DatasetRecord, validation: { s
   const notify = scope.grants.some((g) => NOTIFY_LEVELS.has(g.level))
   const profile = datasetOrgProfile(d.semantic)
   const status = datasetOrgStatus(profile, validation, d.updatedAt)
+  // Every level is defined through the Unit Operasional: without that column nothing can be narrowed.
+  if (profile.standardProblem?.missingField) throw fieldMissing(['Unit Operasional'])
   if (status !== 'OK' && status !== 'PARTIAL') {
     const reason = profile.standardProblem?.message ?? (status === 'UNVERIFIED' ? 'Nilai Unit Operasional dataset belum divalidasi terhadap master PIMS.' : 'Nilai Unit Operasional dataset tidak cocok dengan master PIMS.')
     throw notStandard(notify, status, reason)
   }
-  // Grants that cannot be applied to this dataset give nothing here (never the whole BU instead).
-  const ownershipDim = profile.ownership && profile.ownership !== 'ambiguous' ? profile.ownership : null
+  // A grant whose own column (Kepemilikan / Rayon / Divisi) the dataset lacks gives nothing here: never the whole BU
+  // instead. The user's other grants still apply.
+  const missing: string[] = []
   const applicable = scope.grants.filter((g) => {
-    if (g.ownership) return !!ownershipDim
-    if (g.rayon) return profile.rayon !== 'ambiguous'
-    if (g.division) return profile.division !== 'ambiguous'
+    if (g.ownership && !usable(profile.ownership)) return missing.push(LEVEL_LABEL.OWNERSHIP), false
+    if (g.rayon && !usable(profile.rayon)) return missing.push(LEVEL_LABEL.RAYON), false
+    if (g.division && !usable(profile.division)) return missing.push(LEVEL_LABEL.DIVISION), false
     return true
   })
-  if (!applicable.length) {
-    // Every grant was dropped: ownership grants (level 1, notified) and/or rayon/division ones (levels 8/9, not).
-    const ownership = scope.grants.some((g) => g.ownership)
-    throw notStandard(ownership, 'NO_APPLICABLE_GRANT', ownership ? `Dataset tidak memiliki kolom ${LEVEL_LABEL.OWNERSHIP}.` : 'Kolom rayon/divisi dataset tidak dapat ditentukan.')
-  }
+  if (!applicable.length) throw fieldMissing(missing)
   return { kind: 'rows', fingerprint: fingerprintOf({ g: applicable.map(grantKey), d: d.id, u: d.updatedAt }), profile, grants: applicable, snapshot: scope.snapshot, status }
 }
 
@@ -119,9 +132,9 @@ export function rowPredicate(rs: RowScope, s: SemanticSource, expr: (dim: string
   const pairs: string[] = []
   for (const g of rs.grants) {
     if (g.ownership) pairs.push(own?.e ? `(${inList(bu, g.unitCodes)} AND ${inList(own.e, g.ownership)})` : 'FALSE')
-    // Rayon / Divisi: the field when the source has it, else the parent BU only (fallback never widens).
-    else if (g.rayon && ray?.e) pairs.push(`(${inList(bu, g.unitCodes)} AND ${inList(ray.e, [subValue(ray.form, g.rayon)])})`)
-    else if (g.division && div?.e) pairs.push(`(${inList(bu, g.unitCodes)} AND ${inList(div.e, [subValue(div.form, g.division)])})`)
+    // Rayon / Divisi: only through the field. A source without it gives none of this grant's rows (never the whole BU).
+    else if (g.rayon) pairs.push(ray?.e ? `(${inList(bu, g.unitCodes)} AND ${inList(ray.e, [subValue(ray.form, g.rayon)])})` : 'FALSE')
+    else if (g.division) pairs.push(div?.e ? `(${inList(bu, g.unitCodes)} AND ${inList(div.e, [subValue(div.form, g.division)])})` : 'FALSE')
     else for (const c of g.unitCodes) whole.add(c)
   }
   const clauses = [...(whole.size ? [inList(bu, [...whole])] : []), ...pairs]
