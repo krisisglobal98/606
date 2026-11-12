@@ -402,6 +402,7 @@ export const en: Record<string, string> = {
   "Hapus group {0} (measure tetap di Layout)": "Delete group {0} (measures stay in Layout)",
   "Hapus laporan": "Delete report",
   "Hapus laporan {0}": "Delete report {0}",
+  "Laporan {0} dihapus.": "Report {0} deleted.",
   "Hapus laporan?": "Delete report?",
   "Hapus measure {0}": "Delete measure {0}",
   "Hapus pencarian": "Clear search",

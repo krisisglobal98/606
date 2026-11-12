@@ -92,6 +92,8 @@ export default function OperationalReportsPage() {
     setBusy(true)
     try {
       await savedReportService.remove(deleting.id)
+      toast(tr('Laporan {0} dihapus.', deleting.name), 'success')
+      if (deleting.id === chosen) setChosen(null)
       setDeleting(null)
       setNonce((n) => n + 1)
     } catch (e) {
@@ -107,8 +109,10 @@ export default function OperationalReportsPage() {
   const holdsCurrent = (list: SavedReport[]) => !!current && list.some((r) => r.id === current.id)
   const isOpen = (id: string, list: SavedReport[]) => toggled[id] ?? (!!q.trim() || holdsCurrent(list))
   const flip = (id: string, list: SavedReport[]) => setToggled((t) => ({ ...t, [id]: !isOpen(id, list) }))
+  // The creator of a report or an administrator may delete it (the API refuses everyone else).
+  const canDelete = (r: SavedReport) => user?.role === 'admin' || r.createdBy === user?.id
   const reportBtn = (r: SavedReport) => (
-    <li key={r.id}>
+    <li key={r.id} className={s.reportRow}>
       <button type="button" className={`${s.report}${r.id === current?.id ? ` ${s.reportOn}` : ''}`} aria-current={r.id === current?.id ? 'page' : undefined} onClick={() => setChosen(r.id)} title={r.name}>
         <FileText size={14} aria-hidden />
         <span>
@@ -116,6 +120,11 @@ export default function OperationalReportsPage() {
           <small>{r.datasetName ?? tr('Dataset dihapus')}</small>
         </span>
       </button>
+      {canDelete(r) && (
+        <button type="button" className={`icon-btn ${s.reportDel}`} onClick={() => setDeleting(r)} aria-label={tr('Hapus laporan {0}', r.name)} title={tr('Hapus laporan')}>
+          <Trash2 size={14} />
+        </button>
+      )}
     </li>
   )
   const groupHead = (id: string, name: string, count: number, list: SavedReport[], sub = false) => (
@@ -203,8 +212,10 @@ export default function OperationalReportsPage() {
                   )}
                 </div>
                 <div className={s.headActions}>
-                  {(user?.role === 'admin' || current.createdBy === user?.id) && (
-                    <button type="button" className="icon-btn" onClick={() => setDeleting(current)} aria-label={tr('Hapus laporan {0}', current.name)} title={tr('Hapus laporan')}><Trash2 size={15} /></button>
+                  {canDelete(current) && (
+                    <Button size="sm" icon={<Trash2 size={14} aria-hidden />} onClick={() => setDeleting(current)} aria-label={tr('Hapus laporan {0}', current.name)}>
+                      {tr('Hapus')}
+                    </Button>
                   )}
                   <button type="button" className="icon-btn" onClick={() => setHeadHidden(true)} aria-label={tr('Ciutkan {0}', tr('Info Laporan'))} title={tr('Ciutkan {0}', tr('Info Laporan'))}>
                     <PanelLeftClose size={16} />

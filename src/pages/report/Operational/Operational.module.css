@@ -138,6 +138,21 @@
   color: var(--muted);
   font-size: var(--fs-meta);
 }
+/* A list item: the report (fills the row) and, for its creator or an administrator, a delete button. */
+.reportRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+.reportDel {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.reportDel:hover,
+.reportDel:focus-visible {
+  color: var(--danger);
+}
 .reportOn {
   background: var(--primary-soft);
   color: var(--primary-strong);
