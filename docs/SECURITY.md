@@ -67,7 +67,7 @@ The login throttle needs the real client address. Fastify follows `X-Forwarded-F
 | Mode | `DOD_TRUSTED_PROXIES` | Requirement on the proxy |
 |---|---|---|
 | Native (Mac/Linux/Windows, no proxy; Vite dev/preview) | empty | none: `X-Forwarded-For` is ignored, the TCP peer is the client |
-| IIS (ARR) on the same server | `127.0.0.1` (the address ARR connects from; administrator to confirm) | ARR must add the client to `X-Forwarded-For` (*Preserve client IP*; it appends, so a forged value stays to the left and is ignored). The API must listen on `127.0.0.1`, so only local processes can act as the proxy |
+| IIS (ARR) on the same server | `127.0.0.1` (the address ARR connects from; administrator to confirm) | ARR must add the client to `X-Forwarded-For` (*Preserve client IP*; it appends, so a forged value stays to the left and is ignored). ARR adds the client's port by default (`10.1.2.3:50789`); the API drops it (`clientIp.ts`), so the server-wide ARR setting `includePortInXForwardedFor` (shared with other sites) need not change. The API must listen on `127.0.0.1`, so only local processes can act as the proxy |
 | Another proxy / load balancer chain | every proxy hop's address | each hop appends or overwrites the header; an untrusted hop ends the chain |
 
 Not verified on a real IIS deployment yet; the behaviour above is covered by `server/test/proxy.test.ts` (simulated requests on the real server). Deployment checks: `docs/DEPLOYMENT_WINDOWS.md` §5 #10–#10d.

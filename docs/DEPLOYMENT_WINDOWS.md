@@ -126,6 +126,7 @@ Yang dilakukan `Deploy-DOD.ps1`, berurutan: membuka rilis → `npm ci --omit=dev
 | 8 | Cache | `curl.exe -I <base>/analisis` dan sebuah file `assets\*.js` | `index.html`: `no-cache`; aset: `max-age=31536000` |
 | 9 | CSP | DevTools → Console saat login, Beranda, Analisis, preview Report | Tidak ada *Refused to …* |
 | 10 | Rantai proxy | ARR *Preserve client IP* = `X-Forwarded-For`; `netstat -ano \| findstr :8181` | DOD API hanya listen di `127.0.0.1:8181`; `DOD_TRUSTED_PROXIES` = alamat ARR |
+| 10e | Satu perangkat satu pengguna lewat IIS | Login akun A di PC 1, lalu akun B di PC 2 (perangkat berbeda) | Keduanya berhasil. Bila B ditolak "Perangkat ini sedang dipakai oleh A", IP pengunjung tidak sampai ke API (periksa *Preserve client IP* ARR dan `DOD_TRUSTED_PROXIES`). Format `IP:port` dari ARR sudah ditangani API |
 | 10a | Batas per pengguna | Dari PC A, login salah 6× untuk satu username | Ke-6 → 429 dengan `Retry-After` |
 | 10b | Pengguna lain di belakang proxy yang sama | Langsung setelahnya, login benar dari PC B | 200 |
 | 10c | `X-Forwarded-For` palsu | Dari PC C: 6× login salah dengan header `X-Forwarded-For: 198.51.100.<n>` berbeda | Ke-6 → 429 |

@@ -108,6 +108,17 @@ describe('A. configuration and client identity', () => {
       assert.equal(normalizeIp(raw), want, raw)
   })
 
+  test('IIS ARR forwards the client WITH its port (default includePortInXForwardedFor): the port is dropped', async () => {
+    for (const [raw, want] of [['10.121.64.52:50789', '10.121.64.52'], ['[2001:db8::7]:50789', '2001:db8::7'], ['1.2.3.4:99999x', null], ['2001:db8::7', '2001:db8::7']] as const)
+      assert.equal(normalizeIp(raw), want, raw)
+    const { app } = dod({ DOD_TRUSTED_PROXIES: '127.0.0.1' })
+    // Without this every visitor behind ARR became 127.0.0.1: one device and one throttle bucket for everyone.
+    assert.equal((await peer(app, '127.0.0.1', { 'x-forwarded-for': '10.121.64.52:50789' })).client, '10.121.64.52')
+    assert.equal((await peer(app, '127.0.0.1', { 'x-forwarded-for': '10.121.64.53:50790' })).client, '10.121.64.53')
+    // A forged value from the client stays to the left (ARR appends): the real address is used.
+    assert.equal((await peer(app, '127.0.0.1', { 'x-forwarded-for': '198.51.100.1:80, 10.121.64.52:50789' })).client, '10.121.64.52')
+  })
+
   test('a chain is followed only through trusted hops', async () => {
     const { app } = dod({ DOD_TRUSTED_PROXIES: '10.0.0.1, 10.0.0.2' })
     // client → 10.0.0.1 (IIS) → 10.0.0.2 (load balancer) → API
