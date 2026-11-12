@@ -13,7 +13,8 @@ export function CategorySelect({ value, onChange, id, emptyLabel = tr('Tanpa kat
   const roots = rows.filter((c) => !c.parentId)
   return (
     <>
-      <select id={id} className="select" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} disabled={!list.data} aria-busy={!list.data}>
+      {/* Named by its <label htmlFor> when an id is given; otherwise by itself (e.g. inside a definition list). */}
+      <select id={id} aria-label={id ? undefined : tr('Kategori')} className="select" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} disabled={!list.data} aria-busy={!list.data}>
         <option value="">{list.data ? emptyLabel : list.status === 'error' ? tr('Kategori tidak dapat dimuat') : tr('Memuat kategori…')}</option>
         {roots.map((c) => {
           const subs = rows.filter((x) => x.parentId === c.id)
