@@ -51,6 +51,12 @@ describe('IIS rewrite rules', () => {
     assert.match(rule, /pattern="\^\/\(api\|assets\)\/" negate="true"/)
     assert.match(rule, /url="\/index\.html"/)
   })
+
+  test('the web server and proxy products are not advertised (Server, X-Powered-By)', () => {
+    assert.match(webConfig, /<requestFiltering removeServerHeader="true">/)
+    assert.match(webConfig, /<remove name="X-Powered-By" \/>/)
+    assert.match(webConfig, /<match serverVariable="RESPONSE_X-POWERED-BY" pattern="\.\+" \/>\s*<action type="Rewrite" value="" \/>/)
+  })
 })
 
 describe('reverse proxy configuration', () => {
