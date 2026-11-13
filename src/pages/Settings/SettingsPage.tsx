@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Info, KeyRound, Moon, Palette, Save, SlidersHorizontal, Sun, UserRound, Users } from 'lucide-react'
+import { Info, KeyRound, Moon, Palette, Save, ScrollText, SlidersHorizontal, Sun, UserRound, Users } from 'lucide-react'
 import { allowedLanding, useCanOpen } from '@/app/auth/menuAccess'
 import { Logo } from '@/app/layout/Logo'
 import { Button } from '@/components/common/Button'
@@ -63,6 +63,11 @@ export default function SettingsPage() {
           {user?.role === 'admin' && can('settings.permissions') && (
             <Link className="btn" to="/settings/permissions">
               <KeyRound size={15} aria-hidden />{' '}{tr('Hak akses menu')}
+            </Link>
+          )}
+          {user?.role === 'admin' && can('settings.querylog') && (
+            <Link className="btn" to="/settings/query-log">
+              <ScrollText size={15} aria-hidden />{' '}{tr('Log query')}
             </Link>
           )}
           {user?.role === 'admin' && can('settings.users') && (

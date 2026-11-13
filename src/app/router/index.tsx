@@ -21,6 +21,7 @@ const WarehouseDatasetPage = lazy(() => import('@/pages/data/Warehouse/Warehouse
 const ReportLayout = lazy(() => import('@/pages/report/ReportLayout'))
 const OperationalReportsPage = lazy(() => import('@/pages/report/Operational/OperationalReportsPage'))
 const PermissionsPage = lazy(() => import('@/pages/Settings/permissions/PermissionsPage'))
+const QueryLogPage = lazy(() => import('@/pages/Settings/queryLog/QueryLogPage'))
 
 function Landing() {
   return <LandingRedirect to={allowedLanding(useAuthStore.getState().user, useUiStore.getState().settings.landingPage)} />
@@ -77,6 +78,7 @@ export const router = createBrowserRouter([
           { path: '/settings/users/new', element: m('settings.users', <UserFormPage />) },
           { path: '/settings/users/:id', element: m('settings.users', <UserFormPage />) },
           { path: '/settings/permissions', element: m('settings.permissions', <PermissionsPage />) },
+          { path: '/settings/query-log', element: m('settings.querylog', <QueryLogPage />) },
         ],
       },
     ],

@@ -38,6 +38,18 @@ const ChangePassword = z.object({
   newPassword: z.string().min(8, 'Password baru minimal 8 karakter').max(200),
 })
 const Ident = z.string().min(1).max(128)
+const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal harus YYYY-MM-DD').refine((s) => !Number.isNaN(Date.parse(s)), 'Tanggal tidak valid')
+const QueryLogQuery = z.object({
+  from: IsoDate,
+  to: IsoDate,
+  status: z.enum(['ok', 'error', 'cancelled']).optional(),
+  kind: z.string().max(64).regex(/^[a-z0-9._-]+$/).optional(),
+  userId: z.string().max(64).optional(),
+  datasetId: z.string().max(64).optional(),
+  minDurationMs: z.coerce.number().int().min(0).max(3_600_000).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+})
 
 /**
  * Sign-in, session and sign-out. Separate so the real handlers (with the login throttle) can be tested
@@ -288,8 +300,15 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
     const u = requireRole(req)
     return k.analytics.query(AnalyticsQuerySchema.parse(req.body), req.abort, u)
   })
-  app.get<{ Querystring: { limit?: string } }>('/api/dw/query-log', async (req) => {
+  // Settings › Log Query (administrators; menu settings.querylog). SQL text and parameter values are never stored.
+  app.get('/api/dw/query-log', async (req) => {
     requireRole(req, 'admin')
-    return k.queryLog.recent(Math.min(500, Number(req.query.limit) || 50))
+    const q = QueryLogQuery.parse(req.query)
+    if (q.from > q.to) throw new AppError(400, 'INVALID_PERIOD', 'Tanggal mulai harus sebelum tanggal akhir.')
+    const days = (Date.parse(q.to) - Date.parse(q.from)) / 86_400_000
+    if (days > 366) throw new AppError(400, 'PERIOD_TOO_LONG', 'Periode log paling panjang 1 tahun.')
+    const connections = new Map(k.sources.list().map((c) => [c.id, c.name]))
+    const r = await k.queryLog.search(q)
+    return { ...r, items: r.items.map((x) => ({ ...x, connectionName: connections.get(x.connectionId) ?? x.connectionId })) }
   })
 }

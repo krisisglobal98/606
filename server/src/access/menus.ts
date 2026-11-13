@@ -41,6 +41,7 @@ export const MENUS: readonly MenuDef[] = [
   m('settings', 'Settings', 'Profil, tampilan, dan preferensi', ALL, { locked: ADMIN }),
   m('settings.users', 'Pengguna & Organisasi', 'Kelola pengguna dan master organisasi', ADMIN, { parent: 'settings' }),
   m('settings.permissions', 'Hak Akses Menu', 'Halaman ini', ADMIN, { parent: 'settings', locked: ADMIN }),
+  m('settings.querylog', 'Log Query', 'Query DOD ke database sumber: siapa, dataset, waktu, durasi, status', ADMIN, { parent: 'settings' }),
 ]
 export const MENU = new Map(MENUS.map((x) => [x.id, x]))
 
@@ -68,6 +69,7 @@ export const API_RULES: readonly ApiRule[] = [
   r('WRITE', /^\/api\/categories(\/|$)/, 'data.dataset'),
   r('ANY', /^\/api\/(users|org)(\/|$)/, 'settings.users'),
   r('ANY', /^\/api\/access\//, 'settings.permissions'),
+  r('ANY', /^\/api\/dw\/query-log(\/|$)/, 'settings.querylog'),
 ]
 
 /** The menus a request needs (one list per matching rule; any menu of a list is enough). */
