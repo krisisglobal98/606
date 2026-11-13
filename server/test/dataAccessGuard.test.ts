@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { SqlBuilder } from '../src/analytics/sqlBuilder.ts'
 import { datasetOrgProfile, datasetOrgStatus, validateUnitValues } from '../src/dataAccess/datasetOrg.ts'
-import { forDataset, NOT_STANDARD_MESSAGE, type AccessScope, type RowScope } from '../src/dataAccess/guard.ts'
+import { FAILED_MESSAGE, forDataset, NOT_STANDARD_MESSAGE, UNVERIFIED_MESSAGE, type AccessScope, type RowScope } from '../src/dataAccess/guard.ts'
 import { resolveAssignments } from '../src/dataAccess/scope.ts'
 import { dialectOf } from '../src/dw/sql.ts'
 import { AppError } from '../src/http/errors.ts'
@@ -65,6 +65,14 @@ describe('forDataset', () => {
   test('non-standard datasets return no data for every level', () => {
     for (const [m, v, status] of [[nonPims(), ok, 'NONPIMS'], [model(), null, 'UNVERIFIED'], [model(), { status: 'failed' as const, datasetUpdatedAt: UPDATED }, 'FAILED']] as const)
       refuse(() => forDataset(scoped(SAM1), dataset('d', m), v), 'DATASET_NOT_STANDARD', (d) => assert.equal(d.status, status))
+  })
+  test('not yet validated / values not in the master: their own message with what to do, for every level', () => {
+    const gmk = { level: 'GMK' as const, orgKind: 'ms_gmk_header' as const, orgId: ID.GMK1 }
+    for (const a of [SAM1, gmk]) {
+      assert.throws(() => forDataset(scoped(a), dataset('d'), null), (e) => e instanceof AppError && e.message === UNVERIFIED_MESSAGE, a.level)
+      assert.throws(() => forDataset(scoped(a), dataset('d'), { status: 'failed', datasetUpdatedAt: UPDATED }), (e) => e instanceof AppError && e.message === FAILED_MESSAGE, a.level)
+    }
+    assert.match(UNVERIFIED_MESSAGE, /Validasi akses data/)
   })
   test('no Unit Operasional column (in the dataset or one source): ACCESS_FIELD_MISSING, notified, for every level', () => {
     const levels = [SAM1, { level: 'GMK' as const, orgKind: 'ms_gmk_header' as const, orgId: ID.GMK1 }, { level: 'RAYON' as const, orgKind: 'ms_businessunit' as const, orgId: ID.SAM1, subKind: 'ms_rayon' as const, subId: ID.RAYON_A }]

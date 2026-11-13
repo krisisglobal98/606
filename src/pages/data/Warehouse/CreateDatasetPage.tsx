@@ -12,6 +12,7 @@ import { datasetService as analysisCatalog } from '@/services/dataset/datasetSer
 import { dataWarehouseService } from '@/services/warehouse/dataWarehouseService'
 import { toast } from '@/stores/uiStore'
 import type { DatasetSuggestion, SemanticModel } from '@/types/warehouse'
+import { savedValidationToast } from './datasetAccessMeta'
 import { localProblems, MappingEditor } from './MappingEditor'
 import s from './Warehouse.module.css'
 import { tr } from '@/i18n'
@@ -72,7 +73,7 @@ export default function CreateDatasetPage() {
     try {
       const d = await dataWarehouseService.createDataset({ name: name.trim(), description: description.trim(), connectionId, schema, tables: model.sources.map((x) => x.table), semantic: model, categoryId })
       analysisCatalog.invalidate()
-      toast(tr('Dataset "{0}" dibuat dan siap dipakai di Analisis.', d.name), 'success')
+      toast(...savedValidationToast(d.orgValidation))
       navigate(`/data/dataset/${d.id}`)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : tr('Dataset gagal disimpan.'))

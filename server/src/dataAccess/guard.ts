@@ -35,9 +35,17 @@ export function scopeUnresolved(scope: Extract<AccessScope, { kind: 'none' }>): 
   return e
 }
 
+/**
+ * The columns are fine but the values were not (yet) checked against the PIMS master: said as it is, with what to do,
+ * for every level (it is not the "tabel belum standar" case and has no parameter wording).
+ */
+export const UNVERIFIED_MESSAGE = 'Dataset ini belum divalidasi terhadap master organisasi PIMS, sehingga datanya belum dapat dibatasi sesuai akses Anda. Minta admin atau analyst membuka dataset ini di Data › Set Data lalu menekan "Validasi akses data".'
+export const FAILED_MESSAGE = 'Nilai Unit Operasional dataset ini tidak cocok dengan master organisasi PIMS, sehingga datanya tidak dapat dibatasi sesuai akses Anda. Kolom unit harus berisi kode Unit Operasional PIMS; perbaiki sumbernya lalu jalankan "Validasi akses data" lagi.'
+
 export function notStandard(notify: boolean, status: DatasetOrgStatus | 'NO_APPLICABLE_GRANT', reason: string): AppError {
   // Levels 5/8/9 only: no default-parameter wording (requirement §4), but still no data.
-  const e = new AppError(409, 'DATASET_NOT_STANDARD', notify ? NOT_STANDARD_MESSAGE : NO_DATA_FOR_SCOPE)
+  const message = status === 'UNVERIFIED' ? UNVERIFIED_MESSAGE : status === 'FAILED' ? FAILED_MESSAGE : notify ? NOT_STANDARD_MESSAGE : NO_DATA_FOR_SCOPE
+  const e = new AppError(409, 'DATASET_NOT_STANDARD', message)
   e.details = { notify, status, reason }
   return e
 }

@@ -59,6 +59,9 @@ Status per dataset dihitung otomatis dari model semantiknya (`server/src/dataAcc
 - **Konsistensi (K-09).** Kolom Group (`groupcode`), Region (`regioncode`), dan Company (`company` = alias, `companycodeora` = kode Oracle) yang ada di suatu sumber wajib cocok dengan master untuk BU baris itu. Baris yang tidak cocok tersembunyi; nilai NULL tidak diperiksa.
 - **Notifikasi.** Untuk level 1–4, 6, dan 7: *"Tabel belum standar dan tidak memiliki parameter default untuk pembatasan akses data."* Untuk level 5, 8, dan 9: *"Data tidak tersedia untuk cakupan akses Anda."*
 - **Validasi.** `POST /api/dw/datasets/:id/org-validation` (admin/analyst) menghitung baris per nilai BU di setiap sumber dan membandingkannya dengan master. Hasilnya disimpan di `dor_dataset_org_validation`. Validasi wajib diulang setiap kali dataset diubah, karena versinya ikut `updated_at`.
+  - **Otomatis:** validasi berjalan sendiri setiap kali dataset dibuat atau diubah (`server/src/dataAccess/orgValidation.ts`); hasilnya ikut di jawaban (`orgValidation`) dan ditampilkan sebagai notifikasi. Bila gagal (mis. sumber lambat), dataset tetap tersimpan dengan status UNVERIFIED.
+  - **Layar:** Data › Set Data › dataset › kartu **Akses data**: status, kolom organisasi yang dikenali, validasi terakhir (baris, nilai bukan kode PIMS), dan tombol **Validasi akses data** (admin/analyst).
+  - **Pesan ke pengguna:** UNVERIFIED dan FAILED punya pesan sendiri yang menyebut penyebab dan langkahnya, untuk semua level; "Tabel belum standar …" hanya untuk kolom unit yang bukan kode PIMS.
 
 ## 4. Penerapan di backend
 

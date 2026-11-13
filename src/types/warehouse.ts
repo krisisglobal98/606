@@ -158,4 +158,36 @@ export interface CatalogField {
 export interface WhDataset extends Omit<WhDatasetSummary, 'dimensionCount' | 'measureCount'> {
   semantic: SemanticModel
   fields: CatalogField[]
+  /** Answer of a create / update only: the organization validation that ran right after the save. */
+  orgValidation?: { status: DatasetOrgStatus; error: string | null }
+}
+
+/* ---------------- Data access: organization parameters of a dataset (server dataAccess/datasetOrg.ts) ---------------- */
+
+export type DatasetOrgStatus = 'OK' | 'PARTIAL' | 'UNVERIFIED' | 'NONPIMS' | 'NONE' | 'FAILED'
+export interface OrgDim {
+  dim: string
+  forms: Record<string, string | null>
+}
+export interface DatasetOrgValidation {
+  status: 'ok' | 'partial' | 'failed'
+  unmappedShare: number
+  rows: number
+  unmappedRows: number
+  unmappedValues: string[]
+  perSource: { alias: string; rows: number; unmappedRows: number; distinct: number; unmappedDistinct: number }[]
+}
+export interface DatasetOrgInfo {
+  profile: {
+    businessUnit: OrgDim | null
+    group: OrgDim | null
+    region: OrgDim | null
+    company: OrgDim | null
+    rayon: OrgDim | 'ambiguous' | null
+    division: OrgDim | 'ambiguous' | null
+    ownership: OrgDim | 'ambiguous' | null
+    standardProblem: { status: 'NONPIMS' | 'NONE'; message: string; missingField?: boolean } | null
+  }
+  status: DatasetOrgStatus
+  validation: { status: DatasetOrgValidation['status']; datasetUpdatedAt: string; checkedAt: string; detail: DatasetOrgValidation } | null
 }

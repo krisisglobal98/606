@@ -162,10 +162,14 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
   })
 
   test('non-standard datasets return no data: NONPIMS, UNVERIFIED; notification only for levels 1–4, 6, 7', async () => {
-    for (const id of ['ds-nonpims', 'ds-unverified']) {
-      const r = await query('sam1', id, { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
-      assert.deepEqual([r.status, r.body.error.code, r.body.error.details.notify], [409, 'DATASET_NOT_STANDARD', true], id)
-      assert.match(r.body.error.message, /Tabel belum standar dan tidak memiliki parameter default/)
+    const r = await query('sam1', 'ds-nonpims', { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
+    assert.deepEqual([r.status, r.body.error.code, r.body.error.details.notify], [409, 'DATASET_NOT_STANDARD', true])
+    assert.match(r.body.error.message, /Tabel belum standar dan tidak memiliki parameter default/)
+    // Not yet validated: said as it is, with what to do, for every level (not the "tabel belum standar" text).
+    for (const t of ['sam1', 'gmk']) {
+      const u = await query(t, 'ds-unverified', { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
+      assert.deepEqual([u.status, u.body.error.code, u.body.error.details.status], [409, 'DATASET_NOT_STANDARD', 'UNVERIFIED'], t)
+      assert.match(u.body.error.message, /belum divalidasi terhadap master organisasi PIMS.*Validasi akses data/)
     }
     const g = await query('gmk', 'ds-nonpims', { dimensions: [], chartBy: 'trend', measures: ['produksi'] })
     assert.deepEqual([g.status, g.body.error.details.notify], [409, false])

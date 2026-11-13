@@ -25,10 +25,9 @@ import { registerAccessRoutes } from '../access/routes.ts'
 import type { User } from '../auth/authService.ts'
 import type { Container } from '../container.ts'
 import { AppError } from './errors.ts'
-import { SqlBuilder } from '../analytics/sqlBuilder.ts'
-import { datasetOrgProfile, datasetOrgStatus, validateUnitValues } from '../dataAccess/datasetOrg.ts'
+import { datasetOrgProfile, datasetOrgStatus } from '../dataAccess/datasetOrg.ts'
 import { forDataset, type AccessScope } from '../dataAccess/guard.ts'
-import { dialectOf, quoteIdent } from '../dw/sql.ts'
+import { autoValidateDatasetOrg, validateDatasetOrg } from '../dataAccess/orgValidation.ts'
 import { clientIp } from './clientIp.ts'
 import { bearer, requireRole } from './server.ts'
 
@@ -185,15 +184,19 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
     const b = z.object({ connectionId: Ident, schema: Ident, tables: z.array(Ident).min(1).max(4) }).parse(req.body)
     return k.datasets.suggest(b.connectionId, b.schema, b.tables, req.abort)
   })
+  // Every save of a dataset is a new version: its organization validation runs again at once (orgValidation in the
+  // answer), so scoped users can use it without a separate step.
   app.post('/api/dw/datasets', async (req, reply) => {
     const u = requireRole(req, 'admin', 'analyst')
     const d = await k.datasets.create(CreateDatasetSchema.parse(req.body), u.id)
-    return reply.code(201).send({ ...d, fields: k.datasets.fields(d) })
+    const orgValidation = await autoValidateDatasetOrg(k, d, u.id, req.abort)
+    return reply.code(201).send({ ...d, fields: k.datasets.fields(d), orgValidation })
   })
   app.patch<{ Params: { id: string } }>('/api/dw/datasets/:id', async (req) => {
     const u = requireRole(req, 'admin', 'analyst')
     const d = await k.datasets.update(req.params.id, UpdateDatasetSchema.parse(req.body), u.id)
-    return { ...d, fields: k.datasets.fields(d) }
+    const orgValidation = await autoValidateDatasetOrg(k, d, u.id, req.abort)
+    return { ...d, fields: k.datasets.fields(d), orgValidation }
   })
   app.delete<{ Params: { id: string } }>('/api/dw/datasets/:id', async (req, reply) => {
     const u = requireRole(req, 'admin', 'analyst')
@@ -218,21 +221,7 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
   // Validates the BU values of every source against the PIMS master (counts only; K-13). Admin/analyst.
   app.post<{ Params: { id: string } }>('/api/dw/datasets/:id/org-validation', async (req) => {
     const u = requireRole(req, 'admin', 'analyst')
-    const d = await k.datasets.get(req.params.id)
-    const profile = datasetOrgProfile(d.semantic)
-    if (profile.standardProblem) throw new AppError(409, 'DATASET_NOT_STANDARD', profile.standardProblem.message)
-    const snapshot = await k.dataAccess.snapshots.get()
-    const tables = await k.datasets.tables(d.connectionId, d.schema, d.semantic.sources.map((s) => s.table), req.abort)
-    const b = new SqlBuilder(d.semantic, d.schema, tables, dialectOf(k.datasets.connection(d.connectionId).dbType))
-    const counts: Record<string, { value: string | null; rows: number }[]> = {}
-    for (const s of d.semantic.sources) {
-      const e = b.dimExpr(s, profile.businessUnit!.dim)!
-      const r = await k.query.execute({ connectionId: d.connectionId, sql: `SELECT ${e} AS v, count(*) AS n FROM ${quoteIdent(d.schema)}.${quoteIdent(s.table)} GROUP BY 1`, params: [], kind: 'dataset.org_validation', datasetId: d.id, userId: u.id, timeoutMs: k.config.limits.analyticsTimeoutMs }, req.abort)
-      counts[s.alias] = r.rows.map((x) => ({ value: x.v == null ? null : String(x.v), rows: Number(x.n) }))
-    }
-    const result = validateUnitValues(counts, new Set([...snapshot.units.values()].map((x) => x.code)))
-    await k.dataAccess.storeValidation(d, result, u.id)
-    return { status: datasetOrgStatus(profile, { status: result.status, datasetUpdatedAt: d.updatedAt }, d.updatedAt), validation: result }
+    return validateDatasetOrg(k, await k.datasets.get(req.params.id), u.id, req.abort)
   })
 
   /* ---------------- Analytics ---------------- */

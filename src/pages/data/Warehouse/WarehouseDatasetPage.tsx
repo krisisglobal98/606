@@ -15,6 +15,8 @@ import { toast } from '@/stores/uiStore'
 import type { SemanticModel, WhDataset } from '@/types/warehouse'
 import { formatDateTime } from '@/utils/format'
 import { DeleteDatasetModal } from '../Dataset/DeleteDatasetModal'
+import { DatasetAccessCard } from './DatasetAccessCard'
+import { savedValidationToast } from './datasetAccessMeta'
 import { localProblems, MappingEditor, type TableColumns } from './MappingEditor'
 import s from './Warehouse.module.css'
 import { tr } from '@/i18n'
@@ -59,9 +61,9 @@ function Detail({ d, onSaved }: { d: WhDataset; onSaved: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await dataWarehouseService.updateDataset(d.id, { semantic: model })
+      const r = await dataWarehouseService.updateDataset(d.id, { semantic: model })
       analysisCatalog.invalidate()
-      toast(tr('Pemetaan disimpan.'), 'success')
+      toast(...savedValidationToast(r.orgValidation))
       setEditing(false)
       onSaved()
     } catch (e) {
@@ -72,9 +74,9 @@ function Detail({ d, onSaved }: { d: WhDataset; onSaved: () => void }) {
   }
   const setCategory = async (categoryId: string | null) => {
     try {
-      await dataWarehouseService.updateDataset(d.id, { categoryId })
+      const r = await dataWarehouseService.updateDataset(d.id, { categoryId })
       analysisCatalog.invalidate()
-      toast(tr('Kategori dataset diperbarui.'), 'success')
+      toast(...savedValidationToast(r.orgValidation))
       onSaved()
     } catch (e) {
       toast(e instanceof ApiError ? e.message : tr('Kategori gagal disimpan.'), 'error')
@@ -121,6 +123,8 @@ function Detail({ d, onSaved }: { d: WhDataset; onSaved: () => void }) {
         {deleting && <DeleteDatasetModal dataset={d} onClose={() => setDeleting(false)} onDeleted={() => navigate('/data/dataset')} />}
         <p className="t-meta" style={{ marginTop: 10 }}>{tr('Metadata disimpan di database DOD. Query analitik dijalankan langsung ke sumber (read-only) dan hanya hasil agregasi yang dikirim ke browser.')}</p>
       </Card>
+
+      {(role === 'admin' || role === 'analyst') && <DatasetAccessCard d={d} canValidate />}
 
       <Card
         title={tr('Pemetaan semantik')}

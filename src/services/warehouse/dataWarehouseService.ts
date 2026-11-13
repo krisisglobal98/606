@@ -5,7 +5,8 @@
  * and edit datasets (Data → Set Data).
  */
 import { requestJson } from '@/services/api/apiClient'
-import type { DatasetSuggestion, DwCategory, DwColumn, DwConnection, DwSchema, DwTable, SemanticModel, WhDataset, WhDatasetSummary } from '@/types/warehouse'
+import type { DatasetOrgInfo, DatasetOrgStatus, DatasetOrgValidation, DatasetSuggestion, DwCategory, DwColumn, DwConnection, DwSchema, DwTable, SemanticModel, WhDataset, WhDatasetSummary } from '@/types/warehouse'
+import { tr } from '@/i18n'
 
 const e = encodeURIComponent
 const table = (c: string, s: string, t: string) => `/dw/connections/${e(c)}/schemas/${e(s)}/tables/${e(t)}`
@@ -26,6 +27,11 @@ export const dataWarehouseService = {
   getDataset: (id: string, signal?: AbortSignal) => requestJson<WhDataset>(`/dw/datasets/${e(id)}`, { signal }),
   updateDataset: (id: string, patch: Partial<Pick<WhDataset, 'name' | 'description' | 'status' | 'semantic'>> & { categoryId?: string | null }) =>
     requestJson<WhDataset>(`/dw/datasets/${e(id)}`, { method: 'PATCH', body: patch }),
+  /** Organization parameters of the dataset and its stored validation (admin, analyst). */
+  getDatasetOrg: (id: string, signal?: AbortSignal) => requestJson<DatasetOrgInfo>(`/dw/datasets/${e(id)}/org`, { signal }),
+  /** Validates the Business Unit values of the sources against the PIMS master (counts only). */
+  validateDatasetOrg: (id: string) =>
+    requestJson<{ status: DatasetOrgStatus; validation: DatasetOrgValidation }>(`/dw/datasets/${e(id)}/org-validation`, { method: 'POST', body: {}, loadingLabel: tr('Memvalidasi akses data…') }),
   /** Deletes the dataset definition from DOD; source tables are untouched. */
   deleteDataset: (id: string) => requestJson<void>(`/dw/datasets/${e(id)}`, { method: 'DELETE' }),
   getFieldValues: (datasetId: string, field: string, q?: string, signal?: AbortSignal) =>
