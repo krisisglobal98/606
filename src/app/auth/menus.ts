@@ -25,11 +25,25 @@ export function canOpen(user: Pick<User, 'menus'> | null | undefined, id: string
   return !user.menus || user.menus.includes(id)
 }
 
+/** Sub-menus of the modules that have them (a module is only of use when one of its sub-menus is open). */
+const SUB_MENUS: Record<string, { id: string; path: string }[]> = { report: REPORT_TABS, data: DATA_TABS }
+
+/**
+ * Whether a top-level menu is shown in the navigation: its own permission and, for a module with sub-menus, at least
+ * one open sub-menu. Otherwise a module whose every sub-menu was switched off would still be offered and only lead to
+ * "Menu tidak tersedia".
+ */
+export function canOpenModule(user: Pick<User, 'menus'> | null | undefined, id: string): boolean {
+  if (!canOpen(user, id)) return false
+  const subs = SUB_MENUS[id]
+  return !subs || subs.some((s) => canOpen(user, s.id))
+}
+
 /** The preferred page when its menu is allowed, otherwise the first allowed menu (Settings is always last). */
 export function allowedLanding(user: Pick<User, 'menus'> | null | undefined, preferred: string): string {
   const own = MENU_PATHS.find((m) => preferred === m.path || preferred.startsWith(`${m.path}/`))
-  if (!own || canOpen(user, own.id)) return preferred
-  return MENU_PATHS.find((m) => canOpen(user, m.id))?.path ?? '/settings'
+  if (!own || canOpenModule(user, own.id)) return preferred
+  return MENU_PATHS.find((m) => canOpenModule(user, m.id))?.path ?? '/settings'
 }
 
 /** The first sub-page of a module that the user may open (for the module's index route). */

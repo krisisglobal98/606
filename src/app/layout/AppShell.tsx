@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router'
 import { BarChart3, ChevronDown, Database, FileText, House, KeyRound, LogOut, Settings as SettingsIcon } from 'lucide-react'
 import { Dropdown } from '@/components/common/Dropdown'
 import { LoadingState } from '@/components/common/StateView'
-import { allowedLanding, canOpen } from '@/app/auth/menuAccess'
+import { allowedLanding, canOpenModule } from '@/app/auth/menuAccess'
 import { useAuthStore } from '@/stores/authStore'
 import { toast, useUiStore } from '@/stores/uiStore'
 import { ChangePasswordModal } from './ChangePasswordModal'
@@ -73,7 +73,7 @@ export function AppShell() {
             </span>
           </NavLink>
           <nav className="seg" aria-label={tr('Menu utama')}>
-            {NAV.filter((n) => canOpen(user, n.menu) && (!n.roles || (user && n.roles.includes(user.role)))).map(({ to, label, Icon }) => (
+            {NAV.filter((n) => canOpenModule(user, n.menu) && (!n.roles || (user && n.roles.includes(user.role)))).map(({ to, label, Icon }) => (
               <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'is-on' : '')}>
                 <Icon size={15} aria-hidden />
                 <span className={s.navLabel}>{label}</span>

@@ -1,7 +1,7 @@
 /** Menu permissions on the browser side: the helpers, and the menu ids matching the server catalog. */
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { DATA_TABS, MENU_PATHS, REPORT_TABS, allowedLanding, canOpen, firstAllowed } from '../src/app/auth/menus.ts'
+import { DATA_TABS, MENU_PATHS, REPORT_TABS, allowedLanding, canOpen, canOpenModule, firstAllowed } from '../src/app/auth/menus.ts'
 import { MENUS } from '../server/src/access/menus.ts'
 
 describe('menu permissions (browser)', () => {
@@ -28,5 +28,14 @@ describe('menu permissions (browser)', () => {
     assert.equal(allowedLanding(u, '/somewhere-else'), '/somewhere-else', 'not a menu: the route decides')
     assert.equal(firstAllowed({ menus: ['report', 'report.operasional'] }, REPORT_TABS), '/report/operasional')
     assert.equal(firstAllowed({ menus: ['report'] }, REPORT_TABS), null)
+  })
+
+  test('a module whose every sub-menu is switched off is not offered (navigation, landing page)', () => {
+    const u = { menus: ['beranda', 'analisis', 'report', 'data', 'data.dataset', 'settings'] } // report.operasional off
+    assert.equal(canOpenModule(u, 'report'), false)
+    assert.equal(canOpenModule(u, 'data'), true)
+    assert.equal(canOpenModule(u, 'analisis'), true, 'a menu without sub-menus: its own permission')
+    assert.equal(canOpenModule({}, 'report'), true, 'an older server sends no list: everything stays open')
+    assert.equal(allowedLanding(u, '/report/operasional'), '/beranda')
   })
 })

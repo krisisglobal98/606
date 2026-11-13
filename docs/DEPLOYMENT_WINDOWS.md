@@ -135,7 +135,7 @@ Yang dilakukan `Deploy-DOD.ps1`, berurutan: membuka rilis → `npm ci --omit=dev
 | 12 | Health ringkas | `curl.exe <base>/api/health/datawarehouse` tanpa login | Hanya `{"status": …}` |
 | 13 | Service | Restart server Windows | `DODMIN-API` hidup kembali otomatis; `DOD-API` tidak terpengaruh |
 | 14 | File sensitif | `curl.exe -i <base>/.env` dan `/web.config` | 404 |
-| 15 | Backup | [DATABASE_OPERATIONS.md](DATABASE_OPERATIONS.md#4-backup) untuk `dod_application_sit` | Dump berisi semua tabel |
+| 15 | Backup | `.\Backup-DOD.ps1 -Install -At 01:30` sekali (tugas terjadwal `DODMIN-Backup`, SYSTEM, simpan 14 hari di `D:\DODMinimal\backup`); `.\Backup-DOD.ps1 -VerifyRestore` untuk uji restore ke database sementara. Lihat juga [DATABASE_OPERATIONS.md](DATABASE_OPERATIONS.md#4-backup) | `backup.log`: `OK …dump`; uji restore: semua tabel utama `OK`, database sementara dihapus |
 | 16 | Tidak tumpang tindih | `Get-Service DOD-API, DODMIN-API`; `Get-NetTCPConnection -State Listen -LocalPort 8080,8090,8100,8181` | Kedua service berjalan; 8080/8090 milik `DOD-API`; 8181 milik `DODMIN-API` (127.0.0.1); 8100 milik IIS (situs `DODMIN`) |
 | 17 | Port publik dari luar | Dari PC lain: buka `http://10.110.1.2:8100/` | Halaman login DOD Minimal |
 
