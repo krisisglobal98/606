@@ -65,11 +65,38 @@ try {
     $tmp = "dodmin_restore_test_$(Get-Date -Format 'yyyyMMddHHmm')"
     $exists = & (Join-Path $PgBin 'psql.exe') @common -d $db -tAc "SELECT 1 FROM pg_database WHERE datname = '$tmp'"
     if ($exists) { Fail "Database $tmp sudah ada; uji restore dibatalkan." }
-    & (Join-Path $PgBin 'psql.exe') @common -d $db -c "CREATE DATABASE $tmp" | Out-Null
-    if ($LASTEXITCODE -ne 0) { Fail "Tidak bisa membuat database sementara (akun $($e['DOD_DB_USER']) perlu hak CREATEDB)." }
+    $tables = 'dor_user', 'dor_session', 'dor_dataset', 'dor_category', 'dor_saved_report', 'dor_user_access', 'dor_audit', 'dor_migration', 'dor_role_menu'
+    # A refusal is expected without CREATEDB: psql's error must not stop the script (PowerShell 5.1 turns a native
+    # program's stderr into an error record under ErrorActionPreference=Stop).
+    $ErrorActionPreference = 'Continue'
+    & (Join-Path $PgBin 'psql.exe') @common -d $db -c "CREATE DATABASE $tmp" 2>&1 | Out-Null
+    $created = $LASTEXITCODE -eq 0
+    $ErrorActionPreference = 'Stop'
+    if (-not $created) {
+      # The application account may not create databases (no CREATEDB). The archive is then checked without a restore:
+      # every table's data is read back from the dump (pg_restore to text) and its row count compared with the live one.
+      Log "Akun $($e['DOD_DB_USER']) tidak punya hak CREATEDB: uji isi arsip $($dump.Name) tanpa restore ke database."
+      $q = ($tables | ForEach-Object { "SELECT '$_', (SELECT count(*) FROM $_)" }) -join ' UNION ALL '
+      $live = & (Join-Path $PgBin 'psql.exe') @common -d $db -tAc $q
+      $ok = $true
+      foreach ($t in $tables) {
+        $text = & (Join-Path $PgBin 'pg_restore.exe') --data-only -t $t -f - $dump.FullName
+        $inCopy = $false; $rows = 0
+        foreach ($line in $text) { if ($line -match "^COPY public\.$t ") { $inCopy = $true; continue }; if ($inCopy -and $line -eq '\.') { $inCopy = $false; continue }; if ($inCopy) { $rows++ } }
+        $l = [int](($live | Where-Object { $_ -like "$t|*" }) -replace '.*\|', '')
+        # Sessions come and go between the dump and now (may be 0); the audit log only grows. Others must be equal.
+        $same = if ($t -eq 'dor_session') { $true } elseif ($t -eq 'dor_audit') { $rows -le $l -and $rows -gt 0 } else { $rows -eq $l }
+        if (-not $same) { $ok = $false }
+        Log ("  {0,-18} live={1,-8} arsip={2,-8} {3}" -f $t, $l, $rows, $(if ($same) { 'OK' } else { 'BEDA' }))
+      }
+      $schema = & (Join-Path $PgBin 'pg_restore.exe') --schema-only -f - $dump.FullName
+      $nTables = @($schema -match '^CREATE TABLE ').Count
+      Log "  struktur: $nTables tabel dalam arsip"
+      if ($ok) { Ok "Uji isi arsip berhasil ($nTables tabel; baris tabel utama lengkap). Restore penuh ke database baru perlu akun dengan hak CREATEDB." } else { Fail 'Uji isi arsip: ada tabel yang tidak cocok (lihat backup.log).' }
+      return
+    }
     try {
       & (Join-Path $PgBin 'pg_restore.exe') @common -d $tmp --no-owner --no-privileges $dump.FullName 2>&1 | Out-Null
-      $tables = 'dor_user', 'dor_session', 'dor_dataset', 'dor_category', 'dor_saved_report', 'dor_user_access', 'dor_audit', 'dor_migration', 'dor_role_menu'
       $q = ($tables | ForEach-Object { "SELECT '$_', (SELECT count(*) FROM $_)" }) -join ' UNION ALL '
       $live = & (Join-Path $PgBin 'psql.exe') @common -d $db -tAc $q
       $back = & (Join-Path $PgBin 'psql.exe') @common -d $tmp -tAc $q
@@ -79,7 +106,7 @@ try {
         $l = ($live | Where-Object { $_ -like "$t|*" }) -replace '.*\|', ''
         $b = ($back | Where-Object { $_ -like "$t|*" }) -replace '.*\|', ''
         # Sessions and the audit log keep changing between the dump and now; the others must be equal.
-        $same = if ($t -in 'dor_session', 'dor_audit') { [int]$b -gt 0 -and [int]$b -le [int]$l } else { $l -eq $b }
+        $same = if ($t -eq 'dor_session') { $true } elseif ($t -eq 'dor_audit') { [int]$b -gt 0 -and [int]$b -le [int]$l } else { $l -eq $b }
         if (-not $same) { $ok = $false }
         Log ("  {0,-18} live={1,-8} restore={2,-8} {3}" -f $t, $l, $b, $(if ($same) { 'OK' } else { 'BEDA' }))
       }
