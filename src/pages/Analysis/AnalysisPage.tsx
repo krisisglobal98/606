@@ -162,7 +162,11 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
   // The page opens empty and light: no dataset is loaded and no query is sent until the user chooses data (or picks
   // up the last analysis of this session). Choosing marks the page as started until the user leaves it.
   const [started, setStarted] = useState(false)
-  const dataset = started ? found : null
+  // The list carries no date coverage (it sends no source query, so the page opens fast). The chosen dataset's
+  // coverage and source state are asked now, alongside the first analysis query, which does not wait for it.
+  const chosenId = started && found && found.access?.status !== 'denied' ? found.id : null
+  const detail = useResource((signal) => (chosenId ? datasetService.getChosen(chosenId, signal) : Promise.resolve(null)), chosenId ?? 'off')
+  const dataset = started && found ? (detail.data?.id === found.id ? detail.data : found) : null
   const choose = (d: Dataset) => {
     // A new dataset starts at month to date; the last analysis of the session moves a default period to today.
     if (d.id !== datasetId) setDataset(d)

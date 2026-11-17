@@ -65,9 +65,9 @@ export function FilterControls({ dataset, filter, scope, onDates, onField, onCle
             <CalendarRange size={13} aria-hidden /> {tr('Periode')}
           </span>
           <div className={s.dateRow}>
-            <input type="date" className="input" value={draft.from} min={dataset.coverage.from} max={dataset.coverage.to} onChange={(e) => setDate('from', e.target.value)} aria-label={tr('Tanggal mulai')} aria-invalid={invalid} />
+            <input type="date" className="input" value={draft.from} min={dataset.coverage?.from} max={dataset.coverage?.to} onChange={(e) => setDate('from', e.target.value)} aria-label={tr('Tanggal mulai')} aria-invalid={invalid} />
             <span aria-hidden className={s.dateSep}>–</span>
-            <input type="date" className="input" value={draft.to} min={dataset.coverage.from} max={dataset.coverage.to} onChange={(e) => setDate('to', e.target.value)} aria-label={tr('Tanggal akhir')} aria-invalid={invalid} />
+            <input type="date" className="input" value={draft.to} min={dataset.coverage?.from} max={dataset.coverage?.to} onChange={(e) => setDate('to', e.target.value)} aria-label={tr('Tanggal akhir')} aria-invalid={invalid} />
           </div>
         </div>
       </div>

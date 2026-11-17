@@ -122,6 +122,18 @@ export class SourceRegistry {
     return this.list().find((c) => c.id === id)
   }
 
+  /**
+   * Why the connection cannot be used right now, known without connecting: not configured, or it failed to connect
+   * a moment ago (still in its back-off). null when nothing is known against it.
+   */
+  knownFailure(id: string): AppError | null {
+    const c = this.get(id)
+    if (!c) return sourceError('SOURCE_NOT_CONFIGURED', 'connection not in DOD_DW_CONNECTIONS')
+    if (!this.isConfigured(c)) return sourceError('SOURCE_NOT_CONFIGURED', `missing ${c.passwordSecret}`)
+    const d = this.down.get(id)
+    return d && d.until > Date.now() && d.err instanceof AppError ? d.err : null
+  }
+
   /** A driver's way to drop its clients when a connection is reset. */
   onReset(hook: (id: string) => Promise<void>) {
     this.resetHooks.push(hook)

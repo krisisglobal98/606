@@ -17,14 +17,14 @@ import { z } from 'zod'
 import { AnalyticsQuerySchema } from '../analytics/analyticsService.ts'
 import { GridRequestSchema, GridService } from '../analytics/gridService.ts'
 import { CategoryInputSchema, CategoryPatchSchema } from '../categories/categoryService.ts'
-import { CreateDatasetSchema, UpdateDatasetSchema } from '../datasets/datasetService.ts'
+import { CreateDatasetSchema, UpdateDatasetSchema, type DatasetRecord } from '../datasets/datasetService.ts'
 import { registerReportRoutes } from '../reports/routes.ts'
 import { registerUserRoutes } from '../users/routes.ts'
 import { registerProfileRoutes } from '../profile/routes.ts'
 import { registerAccessRoutes } from '../access/routes.ts'
 import type { User } from '../auth/authService.ts'
 import type { Container } from '../container.ts'
-import { AppError } from './errors.ts'
+import { AppError, notFound } from './errors.ts'
 import { datasetOrgProfile, datasetOrgStatus } from '../dataAccess/datasetOrg.ts'
 import { forDataset, type AccessScope } from '../dataAccess/guard.ts'
 import { autoValidateDatasetOrg, validateDatasetOrg } from '../dataAccess/orgValidation.ts'
@@ -237,60 +237,80 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
   })
 
   /* ---------------- Analytics ---------------- */
-  /** Datasets in the shape the Analysis page uses; a source that cannot be reached is flagged, not hidden. */
-  app.get('/api/dw/catalog', async (req) => {
-    const u = requireRole(req)
-    // Datasets and their organization validations in two queries, whatever the number of datasets: the catalog is
-    // asked for by every Analisis page, and one metadata query per dataset queued behind the small metadata pool.
-    const list = await k.datasets.activeRecords()
-    const validations = await k.dataAccess.validationsOf(list.map((d) => d.id))
-    // One scope for the whole catalog; a refused dataset is listed with its reason and without any data.
-    let scope: AccessScope | null = null
-    let scopeError: AppError | null = null
+  /**
+   * One dataset in the shape the Analysis page uses. The access decision is the same in both modes (listing is not
+   * an access attempt: no denial audit; data endpoints audit their refusals). `peek` sends no source query: coverage
+   * comes from the cache when present, and availability from what is known about the connection (not configured,
+   * failed to connect a moment ago). `load` reads the coverage of the scope from the source (cached 5–30 minutes).
+   * A timeout of that MIN/MAX query only leaves the date inputs unbounded: the source answered, it is not unavailable.
+   */
+  type CatalogScope = { scope: AccessScope | null; scopeError: AppError | null }
+  const catalogScope = async (u: User): Promise<CatalogScope> => {
     try {
-      scope = await k.dataAccess.scopeFor(u)
+      return { scope: await k.dataAccess.scopeFor(u), scopeError: null }
     } catch (e) {
       if (!(e instanceof AppError)) throw e
-      scopeError = e
+      return { scope: null, scopeError: e }
     }
-    const datasets = await Promise.all(
-      list.map(async (d) => {
-        const validation = validations.get(d.id) ?? null
-        let coverage: { from: string; to: string } | null = null
-        let error: { code: string; message: string } | null = null
-        let access: { status: 'ok' | 'partial' | 'denied'; code: string | null; message: string | null; notify: boolean; unmappedShare: number | null } = { status: 'ok', code: null, message: null, notify: false, unmappedShare: null }
+  }
+  const catalogEntry = async (d: DatasetRecord, validation: Awaited<ReturnType<typeof k.dataAccess.validationOf>>, cs: CatalogScope, mode: 'peek' | 'load', signal?: AbortSignal) => {
+    let coverage: { from: string; to: string } | null = null
+    let error: { code: string; message: string } | null = null
+    let access: { status: 'ok' | 'partial' | 'denied'; code: string | null; message: string | null; notify: boolean; unmappedShare: number | null } = { status: 'ok', code: null, message: null, notify: false, unmappedShare: null }
+    try {
+      if (cs.scopeError) throw cs.scopeError
+      const rows = forDataset(cs.scope!, d, validation)
+      if (rows.kind === 'rows' && rows.status === 'PARTIAL') access = { ...access, status: 'partial', unmappedShare: validation?.detail.unmappedShare ?? null }
+      const known = k.sources.knownFailure(d.connectionId)
+      if (known) error = { code: known.code, message: known.message }
+      else if (mode === 'peek') coverage = k.datasets.peekCoverage(d, rows) ?? null
+      else {
         try {
-          if (scopeError) throw scopeError
-          // Listing is not an access attempt: decided here without a denial audit (data endpoints audit their refusals).
-          const rows = forDataset(scope!, d, validation)
-          if (rows.kind === 'rows' && rows.status === 'PARTIAL') access = { ...access, status: 'partial', unmappedShare: validation?.detail.unmappedShare ?? null }
-          try {
-            coverage = await k.datasets.coverage(d, rows, req.abort)
-          } catch (e) {
-            error = e instanceof AppError ? { code: e.code, message: e.message } : { code: 'SOURCE_QUERY_FAILED', message: 'Sumber data tidak tersedia.' }
-          }
+          coverage = await k.datasets.coverage(d, rows, signal)
         } catch (e) {
-          if (!(e instanceof AppError)) throw e
-          access = { status: 'denied', code: e.code, message: e.message, notify: !!(e.details as { notify?: boolean } | undefined)?.notify, unmappedShare: null }
+          if (!(e instanceof AppError && e.code === 'SOURCE_TIMEOUT'))
+            error = e instanceof AppError ? { code: e.code, message: e.message } : { code: 'SOURCE_QUERY_FAILED', message: 'Sumber data tidak tersedia.' }
         }
-        const m = d.semantic
-        return {
-          id: d.id,
-          label: d.name,
-          description: d.description || `${d.sourceTables.join(' + ')} · ${d.connectionName}`,
-          fields: withCalc(d),
-          kpi: { actual: m.kpi.actual, target: m.kpi.target, achievement: m.measures.some((x) => x.id === 'achievement') ? 'achievement' : null },
-          defaultLayout: m.defaultLayout,
-          coverage: coverage ?? { from: '2000-01-01', to: new Date().toISOString().slice(0, 10) },
-          category: d.category ? (d.category.parentName ? { name: d.category.parentName, sub: d.category.name } : { name: d.category.name, sub: null }) : null,
-          source: { kind: 'warehouse', connectionId: d.connectionId, connectionName: d.connectionName, environment: d.environment, tables: d.sourceTables, available: !error, error },
-          access,
-          scopeFields: m.scopeFields,
-          filterFields: m.filterFields,
-        }
-      }),
-    )
-    return { datasets }
+      }
+    } catch (e) {
+      if (!(e instanceof AppError)) throw e
+      access = { status: 'denied', code: e.code, message: e.message, notify: !!(e.details as { notify?: boolean } | undefined)?.notify, unmappedShare: null }
+    }
+    const m = d.semantic
+    return {
+      id: d.id,
+      label: d.name,
+      description: d.description || `${d.sourceTables.join(' + ')} · ${d.connectionName}`,
+      fields: withCalc(d),
+      kpi: { actual: m.kpi.actual, target: m.kpi.target, achievement: m.measures.some((x) => x.id === 'achievement') ? 'achievement' : null },
+      defaultLayout: m.defaultLayout,
+      // null: not known yet (the page asks /api/dw/catalog/:id when the dataset is chosen) or the scope has no rows.
+      coverage,
+      category: d.category ? (d.category.parentName ? { name: d.category.parentName, sub: d.category.name } : { name: d.category.name, sub: null }) : null,
+      source: { kind: 'warehouse', connectionId: d.connectionId, connectionName: d.connectionName, environment: d.environment, tables: d.sourceTables, available: !error, error },
+      access,
+      scopeFields: m.scopeFields,
+      filterFields: m.filterFields,
+    }
+  }
+  /**
+   * Datasets in the shape the Analysis page uses, in three DOD-database queries and no source query, whatever the
+   * number of datasets: every Analisis and Laporan page asks for it, and it used to wait on one MIN/MAX per dataset
+   * (cold: up to 12 s for scoped viewers). A source known to be down is flagged, not hidden.
+   */
+  app.get('/api/dw/catalog', async (req) => {
+    const u = requireRole(req)
+    const list = await k.datasets.activeRecords()
+    const validations = await k.dataAccess.validationsOf(list.map((d) => d.id))
+    const cs = await catalogScope(u)
+    return { datasets: await Promise.all(list.map((d) => catalogEntry(d, validations.get(d.id) ?? null, cs, 'peek'))) }
+  })
+  /** The chosen dataset with its date coverage and the state of its source, asked when the user picks it. */
+  app.get<{ Params: { id: string } }>('/api/dw/catalog/:id', async (req) => {
+    const u = requireRole(req)
+    const d = await k.datasets.get(Ident.parse(req.params.id))
+    if (d.status !== 'active') throw notFound('Dataset tidak ditemukan.')
+    return catalogEntry(d, await k.dataAccess.validationOf(d.id), await catalogScope(u), 'load', req.abort)
   })
   app.post('/api/dw/analytics/grid', async (req) => {
     const u = requireRole(req)

@@ -281,6 +281,15 @@ export class DatasetService {
     })
   }
 
+  /**
+   * The coverage coverage() would answer from its cache (at most 30 minutes old), without any query; undefined when
+   * there is none. The catalog lists datasets with this only, so opening Analisis/Laporan never waits on the source.
+   */
+  peekCoverage(d: DatasetRecord, scope: RowScope): { from: string; to: string } | null | undefined {
+    const hit = this.cache.get(`cov|${d.id}|${d.updatedAt}|${scope.fingerprint}`)
+    return hit && Date.now() - hit.at < 30 * 60_000 ? (hit.value as { from: string; to: string } | null) : undefined
+  }
+
   /** Drops cached coverage, e.g. after the datasets of a connection were deleted. */
   invalidate() {
     this.cache.clear()

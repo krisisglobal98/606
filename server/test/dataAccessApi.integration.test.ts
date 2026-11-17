@@ -94,7 +94,7 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
     // The result cache is ON for every test here: all scope checks below also prove it never crosses scopes.
     const resultCache = new ResultCache(60_000)
     const k = {
-      version: 'test', config, log, db: {}, dw: {}, meta: {}, query: engine, datasets, dataAccess: access, resultCache, analytics: new AnalyticsService(datasets, engine, config, access, resultCache),
+      version: 'test', config, log, db: {}, dw: {}, meta: {}, query: engine, datasets, sources: { knownFailure: () => null, list: () => [conn] }, dataAccess: access, resultCache, analytics: new AnalyticsService(datasets, engine, config, access, resultCache),
       access: { check: async () => {}, menusFor: async () => [] }, auth: {}, loginLimiter: {}, savedReports: {}, users: {}, profile: {}, categories: {},
     } as unknown as Container
     app = createServer(config, log, { userForToken: async (t: string | null) => users.get(t ?? '') ?? (() => { throw Object.assign(new Error('x'), { statusCode: 401 }) })() } as never)
@@ -216,10 +216,22 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
   })
 
   test('catalog: access status per dataset and coverage of the scope only', async () => {
-    const c = (await call('GET', '/api/dw/catalog', 'sam1')).body.datasets as { id: string; access: { status: string; notify: boolean; unmappedShare: number | null }; coverage: { from: string; to: string } }[]
+    const list = await call('GET', '/api/dw/catalog', 'sam1')
+    assert.equal(list.status, 200, JSON.stringify(list.body))
+    const c = list.body.datasets as { id: string; access: { status: string; notify: boolean; unmappedShare: number | null }; coverage: { from: string; to: string } }[]
     const by = Object.fromEntries(c.map((d) => [d.id, d]))
     assert.equal(by['ds-ok']!.access.status, 'ok')
-    assert.deepEqual(by['ds-ok']!.coverage, { from: '2026-01-05', to: '2026-01-06' }, 'SAM-1 rows only (01-11 is inconsistent and hidden)')
+    // The list sends no source query; the chosen dataset's coverage comes from /api/dw/catalog/:id, then the list
+    // answers it from the cache.
+    const one = await call('GET', '/api/dw/catalog/ds-ok', 'sam1')
+    assert.equal(one.status, 200, JSON.stringify(one.body))
+    assert.deepEqual(one.body.coverage, { from: '2026-01-05', to: '2026-01-06' }, 'SAM-1 rows only (01-11 is inconsistent and hidden)')
+    assert.equal(one.body.source.available, true)
+    const again = (await call('GET', '/api/dw/catalog', 'sam1')).body.datasets as { id: string; coverage: unknown }[]
+    assert.deepEqual(again.find((d) => d.id === 'ds-ok')!.coverage, { from: '2026-01-05', to: '2026-01-06' })
+    const deniedOne = await call('GET', '/api/dw/catalog/ds-none', 'sam1')
+    assert.deepEqual([deniedOne.status, deniedOne.body.access.status, deniedOne.body.coverage], [200, 'denied', null], 'refused: no coverage of other units')
+    assert.equal((await call('GET', '/api/dw/catalog/ds-tidak-ada', 'sam1')).status, 404)
     assert.deepEqual([by['ds-partial']!.access.status, by['ds-partial']!.access.unmappedShare], ['partial', 0.1])
     assert.deepEqual([by['ds-none']!.access.status, by['ds-none']!.access.notify], ['denied', true])
     const adminCat = (await call('GET', '/api/dw/catalog', 'admin')).body.datasets as { access: { status: string; code: string } }[]

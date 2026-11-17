@@ -146,7 +146,7 @@ describe('Data Profil: anti-IDOR', () => {
 describe('route inventory', () => {
   // Routes that return source data, values or profiles: each goes through DataAccessGuard (reviewed).
   const GUARDED = [
-    'POST /api/dw/analytics/query', 'POST /api/dw/analytics/grid', 'GET /api/dw/datasets/:id/values', 'GET /api/dw/catalog',
+    'POST /api/dw/analytics/query', 'POST /api/dw/analytics/grid', 'GET /api/dw/datasets/:id/values', 'GET /api/dw/catalog', 'GET /api/dw/catalog/:id',
     'GET /api/profile/units', 'GET /api/profile/blocks', 'GET /api/profile/blocks/:id', 'GET /api/profile/blocks/:id/ops/:tab',
     'GET /api/profile/vehicles', 'GET /api/profile/vehicles/:id', 'GET /api/profile/vehicles/:id/ops', 'PUT /api/profile/vehicles/:id/card', 'PUT /api/profile/vehicles/:id/costs/:period',
   ]

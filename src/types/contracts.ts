@@ -91,7 +91,8 @@ export const DatasetSchema = z.object({
   /** Measure used for the "actual" KPI, its plan counterpart, and the ratio KPI. */
   kpi: z.object({ actual: z.string(), target: z.string().nullable(), achievement: z.string().nullable() }),
   defaultLayout: z.object({ dimensions: z.array(z.string()), measures: z.array(z.string()) }),
-  coverage: z.object({ from: z.string(), to: z.string() }),
+  /** Date range of the user's rows; null until the dataset is chosen (GET /dw/catalog/:id) or when it has no rows. */
+  coverage: z.object({ from: z.string(), to: z.string() }).nullable(),
   /** Absent for the built-in samples (they use the fixed organisation scope). */
   source: DatasetSourceSchema.optional(),
   /**
