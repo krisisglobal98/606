@@ -4,7 +4,7 @@ import { EmptyState } from '@/components/common/StateView'
 import { PivotGrid } from '@/pages/Analysis/grid/PivotGrid'
 import { useLocalGridState } from '@/pages/Analysis/grid/gridState'
 import { useHierarchy } from '@/pages/Analysis/grid/useHierarchy'
-import { createEngine, kpiMeasures, type CalcMeasure, type MeasureSetting } from '@/semantic/measureEngine'
+import { createEngine, kpiMeasures, windowsOf, type CalcMeasure, type MeasureSetting } from '@/semantic/measureEngine'
 import type { TableOptions } from '@/stores/analysisStore'
 import { flatten, sanitize, type MeasureBlock } from '@/stores/measureLayout'
 import type { AnalyticsQuery, DataScope, Dataset, Field, Filter } from '@/types/contracts'
@@ -34,9 +34,10 @@ export function SavedReportGrid({ report, dataset, filter, scope, focus, onToggl
   const query: AnalyticsQuery | null = server.length
     ? { datasetId: dataset.id, scope, filter, dimensions: dims.map((d) => d.id), measures: [...new Set([...server, ...kpiMeasures(dataset, engine)])], chartBy: 'trend' }
     : null
-  const hier = useHierarchy(query, withCounts)
+  const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, state.settings[m]])))
+  const hier = useHierarchy(query, withCounts, windows)
   return query ? (
-    <PivotGrid hier={hier} engine={engine} dims={dims} periodLabel={`${formatDate(filter.dateFrom)} – ${formatDate(filter.dateTo)}`} focus={focus} onToggleFocus={onToggleFocus} state={state} onChangeFilter={onChangeFilter} />
+    <PivotGrid hier={hier} engine={engine} dims={dims} periodLabel={`${formatDate(filter.dateFrom)} – ${formatDate(filter.dateTo)}${hier.reportDate ? tr(' · tanggal laporan {0}', formatDate(hier.reportDate)) : ''}`} focus={focus} onToggleFocus={onToggleFocus} state={state} onChangeFilter={onChangeFilter} />
   ) : (
     <Card><EmptyState title={tr('Laporan ini tidak punya measure')} message={tr('Measure yang disimpan sudah tidak ada di dataset.')} /></Card>
   )

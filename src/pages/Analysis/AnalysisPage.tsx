@@ -11,8 +11,8 @@ import { datasetService } from '@/services/dataset/datasetService'
 import { LEFT_PANELS, RIGHT_PANELS, useAnalysisStore, type Panel } from '@/stores/analysisStore'
 import type { AnalyticsQuery, Dataset, Field } from '@/types/contracts'
 import { Button } from '@/components/common/Button'
-import { formatNumber } from '@/utils/format'
-import { createEngine, kpiMeasures, type CalcMeasure } from '@/semantic/measureEngine'
+import { formatDate, formatNumber } from '@/utils/format'
+import { createEngine, kpiMeasures, windowsOf, type CalcMeasure } from '@/semantic/measureEngine'
 import { selectCalc, useGridPrefs } from '@/stores/gridPrefsStore'
 import { EdgeTab } from '@/components/common/EdgeTab'
 import { StartCard } from '@/components/common/StartCard'
@@ -206,7 +206,8 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
   const gridMeasures = engine && dataset ? [...new Set([...serverMeasures, ...kpiMeasures(dataset, engine)])] : []
   const withCounts = measures.some((m) => measureSettings[m]?.display?.some((c) => c === 'count' || c === 'average'))
   const gridQuery: AnalyticsQuery | null = query ? { ...query, measures: gridMeasures, dimensions: dimensions.map((d) => d.id), chartBy: 'trend' } : null
-  const hier = useHierarchy(gridQuery, withCounts)
+  const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, measureSettings[m]])))
+  const hier = useHierarchy(gridQuery, withCounts, windows)
   const key = JSON.stringify(query)
   const fetcher = useCallback((signal: AbortSignal) => (query ? analyticsService.query(query, signal) : Promise.resolve(null)), [key]) // eslint-disable-line react-hooks/exhaustive-deps
   const res = useResource(fetcher, key, 220)
@@ -404,7 +405,7 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
             {profile}
             {/* Data Profil and Tabel Hasil take turns: opening the profile collapses the table, collapsing it brings the table back. */}
             <div id="panel-table" className={s.tableSlot} hidden={!focus && profileOpen}>
-              {engine && <PivotGrid hier={hier} engine={engine} dims={dimensions} periodLabel={result?.summary.periodLabel ?? null} titleInfo={tableInfo} focus={focus} onToggleFocus={() => (focus ? setFocus(false) : enterFocus())} onChangeFilter={() => setFilterOpen(true)} />}
+              {engine && <PivotGrid hier={hier} engine={engine} dims={dimensions} periodLabel={result?.summary.periodLabel ? `${result.summary.periodLabel}${hier.reportDate ? tr(' · tanggal laporan {0}', formatDate(hier.reportDate)) : ''}` : null} titleInfo={tableInfo} focus={focus} onToggleFocus={() => (focus ? setFocus(false) : enterFocus())} onChangeFilter={() => setFilterOpen(true)} />}
             </div>
           </>
         )}

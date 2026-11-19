@@ -125,7 +125,7 @@ export function MappingEditor({ model, tables, onChange, readOnly }: { model: Se
       )}
 
       <h3 className={s.sectionTitle}>{tr('Measure')}</h3>
-      <p className={s.sectionHint}><b>{tr('SUM')}</b>{' '}{tr('untuk nilai harian (produksi, janjang).')}{' '}<b>{tr('Snapshot')}</b>{' '}{tr('untuk nilai yang berulang di setiap baris harian (luas, jumlah pokok): diambil sekali per entitas, lalu dijumlah.')}{' '}<b>{tr('Rasio')}</b>{' '}{tr('dihitung setelah agregasi.')}</p>
+      <p className={s.sectionHint}><b>{tr('SUM')}</b>{' '}{tr('untuk nilai harian (produksi, janjang).')}{' '}<b>{tr('Snapshot')}</b>{' '}{tr('untuk nilai yang berulang di setiap baris harian (luas, jumlah pokok): diambil sekali per entitas, lalu dijumlah.')}{' '}{tr('Pilih "nilai tanggal terakhir" untuk status harian (unit standby/rusak): yang dihitung nilai pada tanggal terakhir periode, termasuk 0.')}{' '}<b>{tr('Rasio')}</b>{' '}{tr('dihitung setelah agregasi.')}</p>
       <div className="dtable-wrap">
         <table className={`dtable ${s.mapTable}`}>
           <thead><tr><th scope="col">{tr('Label')}</th><th scope="col">{tr('Id')}</th><th scope="col">{tr('Jenis')}</th><th scope="col">{tr('Sumber & kolom / rumus')}</th><th scope="col">{tr('Satuan')}</th><th scope="col">{tr('Desimal')}</th><th scope="col"><span className="sr-only">{tr('Aksi')}</span></th></tr></thead>
@@ -159,6 +159,12 @@ export function MappingEditor({ model, tables, onChange, readOnly }: { model: Se
                         <option value="">{tr('— pilih kolom —')}</option>
                         {cols(x.source).filter((c) => c.typeCategory === 'number').map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
                       </select>
+                      {x.type === 'snapshot' && (
+                        <select className="select select--sm" value={x.pick ?? 'max'} onChange={(e) => setMeasure(i, { ...x, pick: e.target.value === 'last' ? 'last' : undefined })} aria-label={tr('Cara ambil snapshot {0}', x.label)} title={tr('Nilai terbesar: luas, jumlah pokok. Nilai tanggal terakhir: status harian (unit standby/rusak pada tanggal laporan), termasuk nilai 0.')}>
+                          <option value="max">{tr('nilai terbesar')}</option>
+                          <option value="last">{tr('nilai tanggal terakhir')}</option>
+                        </select>
+                      )}
                     </span>
                   )}
                 </td>

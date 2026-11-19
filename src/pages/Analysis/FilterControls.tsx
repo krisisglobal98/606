@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
-import { CalendarRange, X } from 'lucide-react'
+import { CalendarCheck, CalendarRange, X } from 'lucide-react'
 import { MultiSelect } from '@/components/forms/MultiSelect'
 import { SearchableSelect } from '@/components/forms/SearchableSelect'
 import type { DataScope, Dataset, Filter } from '@/types/contracts'
@@ -12,6 +12,8 @@ interface Props {
   filter: Filter
   scope: DataScope
   onDates: (from: string, to: string) => void
+  /** Tanggal laporan of the H.I / S.D.H.I / YTD columns; null = automatic (end of the period, at most today). */
+  onReportDate?: (date: string | null) => void
   onField: (field: string, value: string | null) => void
   onClearScope: (field: string) => void
   /** Multi-value fields (value lists that limit the data). */
@@ -24,8 +26,9 @@ interface Props {
  * the value lists, the single-value filters in titled sections, and a summary of what is applied. Every list opens as
  * a searchable dropdown with a fixed, scrolling height. Invalid date ranges are flagged, not applied.
  */
-export function FilterControls({ dataset, filter, scope, onDates, onField, onClearScope, scopeFields = [], onToggleScope }: Props) {
+export function FilterControls({ dataset, filter, scope, onDates, onReportDate, onField, onClearScope, scopeFields = [], onToggleScope }: Props) {
   const dateId = useId()
+  const reportId = useId()
   const [draft, setDraft] = useState({ from: filter.dateFrom, to: filter.dateTo })
   const invalid = !draft.from || !draft.to || draft.from > draft.to
   const labelOf = (k: string) => dataset.fields.find((f) => f.id === k)?.label ?? k
@@ -70,6 +73,24 @@ export function FilterControls({ dataset, filter, scope, onDates, onField, onCle
             <input type="date" className="input" value={draft.to} min={dataset.coverage?.from} max={dataset.coverage?.to} onChange={(e) => setDate('to', e.target.value)} aria-label={tr('Tanggal akhir')} aria-invalid={invalid} />
           </div>
         </div>
+        {onReportDate && (
+          <div className={`field ${s.dates}`} role="group" aria-labelledby={reportId}>
+            <span id={reportId} className="t-label">
+              <CalendarCheck size={13} aria-hidden /> {tr('Tanggal laporan')}
+            </span>
+            <div className={s.dateRow}>
+              <input type="date" className="input" value={filter.reportDate ?? ''} min={dataset.coverage?.from} max={dataset.coverage?.to} onChange={(e) => onReportDate(e.target.value || null)} aria-label={tr('Tanggal laporan')} aria-describedby={`${reportId}-hint`} />
+              {filter.reportDate && (
+                <button type="button" className="btn btn--sm btn--ghost" onClick={() => onReportDate(null)}>
+                  {tr('Otomatis')}
+                </button>
+              )}
+            </div>
+            <small id={`${reportId}-hint`} className="t-meta">
+              {filter.reportDate ? tr('Kolom H.I = tanggal ini, S.D.H.I = tanggal 1 bulan itu s.d. tanggal ini.') : tr('Otomatis: tanggal akhir periode, paling lambat hari ini. Dipakai kolom H.I dan S.D.H.I.')}
+            </small>
+          </div>
+        )}
       </div>
       {lists.length > 0 && section(tr('Batasan data'), tr('boleh pilih beberapa nilai'), lists)}
       {singles.length > 0 && section(tr('Filter nilai'), tr('satu nilai per field'), singles)}

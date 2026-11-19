@@ -206,6 +206,34 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
     assert.deepEqual(child.body.rows.map((x: { label: string }) => x.label), ['01', '02'])
   })
 
+  test('grid H.I / S.D.H.I / YTD windows: same numbers as separate periods, inside the scope only', async () => {
+    const g = (over: Record<string, unknown>, windows?: string[]) => call('POST', '/api/dw/analytics/grid', 'frg', { query: Q('ds-ok', over), depth: 0, path: null, withTotal: true, ...(windows ? { windows } : {}) })
+    const r = await g({ filter: { dateFrom: '2026-01-01', dateTo: '2026-12-31', reportDate: '2026-01-08' } }, ['hi', 'sdhi', 'ytd'])
+    assert.equal(r.status, 200, JSON.stringify(r.body))
+    assert.equal(r.body.reportDate, '2026-01-08')
+    // frg sees SAM-1, SAM-2 and CLP-1 (BHP-1, the company code CLP and the inconsistent FAP row stay hidden).
+    assert.deepEqual([r.body.total.cur.produksi, r.body.total.hi.produksi, r.body.total.sdhi.produksi, r.body.total.ytd.produksi], [270, 40, 100, 100])
+    assert.equal(r.body.total.sdhi.budget_produksi, 100, 'the budget source follows the same window (SAM-1 only)')
+    const by = Object.fromEntries(r.body.rows.map((x: { label: string; hi: Record<string, number | null>; sdhi: Record<string, number | null> }) => [x.label, [x.hi.produksi, x.sdhi.produksi]]))
+    assert.deepEqual(by, { 'CLP-1': [40, 40], 'SAM-1': [null, 30], 'SAM-2': [null, 30] })
+    // The windows equal the same periods asked one by one.
+    for (const [w, from, to] of [['hi', '2026-01-08', '2026-01-08'], ['sdhi', '2026-01-01', '2026-01-08']] as const) {
+      const one = await g({ filter: { dateFrom: from, dateTo: to } })
+      assert.equal(one.body.total.cur.produksi, r.body.total[w].produksi, w)
+    }
+    // A scoped user gets the windows of his own rows only.
+    const sam = await call('POST', '/api/dw/analytics/grid', 'sam1', { query: Q('ds-ok', { filter: { dateFrom: '2026-01-01', dateTo: '2026-12-31', reportDate: '2026-01-08' } }), depth: 0, path: null, withTotal: true, windows: ['sdhi'] })
+    assert.equal(sam.body.total.sdhi.produksi, 30)
+    // Without windows nothing extra is returned; without a report date it is min(dateTo, today).
+    const plain = await g({})
+    assert.deepEqual(Object.keys(plain.body.total).sort(), ['cur', 'prev'])
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    assert.equal((await g({ filter: { dateFrom: '2026-01-01', dateTo: '2099-12-31' } }, ['hi'])).body.reportDate, today)
+    assert.equal((await g({ filter: { dateFrom: '2026-01-01', dateTo: '2026-01-31' } }, ['hi'])).body.reportDate, today < '2026-01-31' ? today : '2026-01-31')
+    assert.equal((await g({ filter: { dateFrom: '2026-01-01', dateTo: '2026-01-31', reportDate: '2026-02-30' } }, ['hi'])).status, 400, 'an impossible date is refused')
+  })
+
   test('distinct values and search: only values inside the scope; cache never crosses scopes', async () => {
     const v = async (t: string, q = '') => (await call('GET', `/api/dw/datasets/ds-ok/values?field=bisnis_unit${q ? `&q=${q}` : ''}`, t)).body.values
     assert.deepEqual(await v('frg'), ['CLP-1', 'SAM-1', 'SAM-2'])

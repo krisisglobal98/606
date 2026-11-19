@@ -195,7 +195,11 @@ export class SqlBuilder {
           ...dimList,
           ...eList,
           ...winParams.flatMap((w) => [
-            ...ms.map((m) => `${D.agg(m.type === 'snapshot' ? 'MAX' : 'SUM', quoteIdent(`c_${m.id}`), win(w))} AS ${quoteIdent(mcol(m.id, w.id))}`),
+            ...ms.map((m) => {
+              const c = quoteIdent(`c_${m.id}`)
+              const e = m.type !== 'snapshot' ? D.agg('SUM', c, win(w)) : m.pick === 'last' ? D.lastBy(c, 'dt', win(w)) : D.agg('MAX', c, win(w))
+              return `${e} AS ${quoteIdent(mcol(m.id, w.id))}`
+            }),
             `${D.agg('COUNT', null, win(w))} AS ${quoteIdent(ncol(s.alias, w.id))}`,
           ]),
         ]

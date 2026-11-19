@@ -76,6 +76,7 @@ export function FilterModal({ dataset, subtitle, filter, scope, saved, onApply, 
         filter={draft.filter}
         scope={draft.scope}
         onDates={(dateFrom, dateTo) => setDraft((d) => ({ ...d, filter: { ...d.filter, dateFrom, dateTo } }))}
+        onReportDate={(reportDate) => setDraft((d) => ({ ...d, filter: { ...d.filter, reportDate } }))}
         onField={(dim, value) => setDraft((d) => ({ ...d, filter: { ...d.filter, fields: { ...d.filter.fields, [dim]: value } } }))}
         onClearScope={(field) => setDraft((d) => ({ ...d, scope: { ...d.scope, [field]: [] } }))}
         scopeFields={dataset.scopeFields ?? []}

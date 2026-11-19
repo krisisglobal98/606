@@ -81,8 +81,9 @@ export default function OperationalReportsPage() {
   const current = reports.find((r) => r.id === chosen) ?? null
   const recent = useMemo(() => [...reports].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6), [reports])
   const dataset = data.data?.datasets.find((d) => d.id === current?.datasetId) ?? null
-  // A saved report opens at month to date (first of the current month up to today); its other filters are kept.
-  const saved = current ? { filter: { ...(current.layout.filter as unknown as Filter), ...monthToDate() }, scope: current.layout.scope as DataScope } : null
+  // A saved report opens at month to date (first of the current month up to today) with an automatic report date
+  // (H.I = today); its other filters are kept. Another period or report date is chosen in the filter.
+  const saved = current ? { filter: { ...(current.layout.filter as unknown as Filter), ...monthToDate(), reportDate: null }, scope: current.layout.scope as DataScope } : null
   const active = current && applied?.id === current.id ? applied : saved
   const changed = !!(active && saved && normalized(active) !== normalized(saved))
   const filterCount = active ? activeFilterCount(active) : 0

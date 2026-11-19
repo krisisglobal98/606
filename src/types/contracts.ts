@@ -122,6 +122,8 @@ export const FilterSchema = z.object({
   /** ISO dates, inclusive. */
   dateFrom: z.string(),
   dateTo: z.string(),
+  /** Report date (tanggal laporan) of the H.I / S.D.H.I / YTD columns; null or absent = min(dateTo, today). */
+  reportDate: z.string().nullable().optional(),
   /** Warehouse datasets: single-value filters by dimension id (filter bar). */
   fields: z.record(z.string(), z.string().nullable()).optional(),
 })
@@ -234,11 +236,14 @@ export const GridRequestSchema = z.object({
   withTotal: z.boolean(),
   /** Also return source row counts per base measure ("#count:<id>"), for Count / Average. */
   withCounts: z.boolean().optional(),
+  /** Report-date windows: hi = H.I (the report date), sdhi = S.D.H.I (month to the report date), ytd = year to it. */
+  windows: z.array(z.enum(['hi', 'sdhi', 'ytd'])).optional(),
 })
 export type GridRequest = z.infer<typeof GridRequestSchema>
+export type ReportWindow = 'hi' | 'sdhi' | 'ytd'
 
 const BaseValuesSchema = z.record(z.string(), z.number().nullable())
-export const GridAggSchema = z.object({ cur: BaseValuesSchema, prev: BaseValuesSchema })
+export const GridAggSchema = z.object({ cur: BaseValuesSchema, prev: BaseValuesSchema, hi: BaseValuesSchema.optional(), sdhi: BaseValuesSchema.optional(), ytd: BaseValuesSchema.optional() })
 export type GridAgg = z.infer<typeof GridAggSchema>
 
 export const GridRowSchema = GridAggSchema.extend({
@@ -254,5 +259,7 @@ export const GridResponseSchema = z.object({
   total: GridAggSchema.nullable(),
   truncated: z.boolean(),
   sourceRows: z.number().nullable(),
+  /** The report date the H.I / S.D.H.I / YTD windows used (present when windows were asked). */
+  reportDate: z.string().optional(),
 })
 export type GridResponse = z.infer<typeof GridResponseSchema>

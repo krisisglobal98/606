@@ -29,10 +29,33 @@ export const GridRequestSchema = z.object({
   path: z.array(z.string().nullable()).max(30).nullable(),
   withTotal: z.boolean(),
   withCounts: z.boolean().optional(),
+  /**
+   * Report-date windows to return besides the period (cur) and last year (prev), all from the same statement:
+   * hi = the report date (H.I), sdhi = first of its month up to it (S.D.H.I), ytd = first of its year up to it.
+   */
+  windows: z.array(z.enum(['hi', 'sdhi', 'ytd'])).max(3).optional(),
 })
 export type GridRequest = z.infer<typeof GridRequestSchema>
+export type ReportWindow = 'hi' | 'sdhi' | 'ytd'
 
 type Values = Record<string, number | null>
+
+/** Today as the server's calendar date (the server runs in the users' time zone, WIB). */
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** The report date: as given, otherwise the end of the period or today, whichever is earlier. */
+export function reportDateOf(filter: { dateTo: string; reportDate?: string | null }, now: string = today()): string {
+  return filter.reportDate ?? (filter.dateTo < now ? filter.dateTo : now)
+}
+
+/** Date range of a report-date window (inclusive ISO dates). */
+export function reportWindow(id: ReportWindow, reportDate: string): DateWindow {
+  if (id === 'hi') return { id, from: reportDate, to: reportDate }
+  return { id, from: id === 'sdhi' ? `${reportDate.slice(0, 7)}-01` : `${reportDate.slice(0, 4)}-01-01`, to: reportDate }
+}
 
 function shiftYear(iso: string, years: number) {
   const [y, m, d] = iso.split('-').map(Number)
@@ -90,6 +113,9 @@ export class GridService {
 
     const cur: DateWindow = { id: 'cur', from: q.filter.dateFrom, to: q.filter.dateTo }
     const prev: DateWindow = { id: 'prev', from: shiftYear(cur.from, -1), to: shiftYear(cur.to, -1) }
+    const extra = [...new Set(req.windows ?? [])]
+    const rd = reportDateOf(q.filter)
+    const extraWindows = extra.map((w) => reportWindow(w, rd))
     // Without row dimensions only the grand total is returned.
     const dims = q.dimensions.slice(0, L + 1)
     const base = b.baseMeasures(q.measures)
@@ -97,7 +123,7 @@ export class GridService {
       dims,
       groupingSets: dims.length ? [dims.map((_, i) => i), ...(req.withTotal ? [[]] : [])] : [[]],
       measures: base,
-      windows: [cur, prev],
+      windows: [cur, prev, ...extraWindows],
       filters,
       scope,
       limit: GRID_MAX_ROWS + 2,
@@ -108,9 +134,11 @@ export class GridService {
     const agg = (r: Record<string, unknown>) => {
       const c: Values = {}
       const p: Values = {}
+      const w = Object.fromEntries(extra.map((x) => [x, {} as Values])) as Partial<Record<ReportWindow, Values>>
       for (const id of base) {
         c[id] = num(r[built.col(id, 'cur')])
         p[id] = num(r[built.col(id, 'prev')])
+        for (const x of extra) w[x]![id] = num(r[built.col(id, x)])
         if (req.withCounts) {
           // Source rows behind this measure (its own table), for Count / Average.
           const src = (b.measure(id) as { source?: string }).source
@@ -120,10 +148,10 @@ export class GridService {
           }
         }
       }
-      return { cur: c, prev: p }
+      return { cur: c, prev: p, ...w }
     }
     const n = dims.length
-    let total: { cur: Values; prev: Values } | null = null
+    let total: ReturnType<typeof agg> | null = null
     let sourceRows: number | null = null
     const rows = []
     for (const r of res.rows) {
@@ -147,6 +175,6 @@ export class GridService {
       }
       return 0
     })
-    return { depth: L, rows: rows.slice(0, GRID_MAX_ROWS), total, truncated: rows.length > GRID_MAX_ROWS, sourceRows }
+    return { depth: L, rows: rows.slice(0, GRID_MAX_ROWS), total, truncated: rows.length > GRID_MAX_ROWS, sourceRows, ...(extra.length ? { reportDate: rd } : {}) }
   }
 }

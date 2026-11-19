@@ -20,7 +20,14 @@ import { dimCol, levelOf, SqlBuilder, type DateWindow } from './sqlBuilder.ts'
 
 type Ctx = Awaited<ReturnType<AnalyticsService['context']>>
 
-const ISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'format tanggal YYYY-MM-DD')
+// A real calendar date (2026-02-30 is refused here, not by the source database as a 500).
+const ISO = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'format tanggal YYYY-MM-DD')
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`)
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s
+  }, 'tanggal tidak valid')
 
 export const AnalyticsQuerySchema = z.object({
   datasetId: z.string().min(1),
@@ -28,6 +35,8 @@ export const AnalyticsQuerySchema = z.object({
   filter: z.object({
     dateFrom: ISO,
     dateTo: ISO,
+    /** Report date (tanggal laporan) of the H.I / S.D.H.I / YTD windows; null or absent = min(dateTo, today). */
+    reportDate: ISO.nullable().optional(),
     fields: z.record(z.string(), z.string().max(200).nullable()).optional(),
   }).passthrough(),
   // Bounded by what a dataset defines (validated against the semantic model), not by a fixed count.

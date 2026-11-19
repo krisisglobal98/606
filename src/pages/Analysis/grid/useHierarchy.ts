@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/services/api/apiClient'
 import { analyticsService } from '@/services/analytics/analyticsService'
 import { toast } from '@/stores/uiStore'
-import type { AnalyticsQuery, GridAgg, GridResponse } from '@/types/contracts'
+import type { AnalyticsQuery, GridAgg, GridResponse, ReportWindow } from '@/types/contracts'
 import { LOCALE, tr } from '@/i18n'
 
 export interface HNode {
@@ -21,7 +21,7 @@ export interface Branch {
 }
 
 const keyOf = (path: (string | null)[]) => JSON.stringify(path)
-const toNodes = (r: GridResponse): HNode[] => r.rows.map((x) => ({ key: keyOf(x.path), path: x.path, label: x.label, level: x.path.length - 1, hasChildren: x.hasChildren, agg: { cur: x.cur, prev: x.prev } }))
+const toNodes = (r: GridResponse): HNode[] => r.rows.map((x) => ({ key: keyOf(x.path), path: x.path, label: x.label, level: x.path.length - 1, hasChildren: x.hasChildren, agg: { cur: x.cur, prev: x.prev, hi: x.hi, sdhi: x.sdhi, ytd: x.ytd } }))
 const message = (e: unknown) => (e instanceof ApiError ? e.message : tr('Data tabel gagal dimuat.'))
 
 /**
@@ -30,8 +30,10 @@ const message = (e: unknown) => (e instanceof ApiError ? e.message : tr('Data ta
  * Expansion is kept while the dimensions stay the same (filters/measures change → reload the open branches),
  * and resets when the hierarchy itself changes.
  */
-export function useHierarchy(query: AnalyticsQuery | null, withCounts = false) {
-  const qkey = JSON.stringify([query, withCounts])
+export function useHierarchy(query: AnalyticsQuery | null, withCounts = false, windows: ReportWindow[] = []) {
+  // Report-date windows (H.I / S.D.H.I / YTD) are asked only when a column shows them.
+  const win = windows.length ? { windows } : {}
+  const qkey = JSON.stringify([query, withCounts, windows])
   const dimsKey = JSON.stringify(query ? [query.datasetId, query.dimensions] : null)
   const [tops, setTops] = useState<Record<string, { status: 'ok' | 'error'; res?: GridResponse; error?: string }>>({})
   const [branches, setBranches] = useState<Record<string, Branch>>({})
@@ -51,7 +53,7 @@ export function useHierarchy(query: AnalyticsQuery | null, withCounts = false) {
     ctl.current = c
     inflight.current.clear()
     analyticsService
-      .grid({ query, depth: 0, path: null, withTotal: true, withCounts }, c.signal)
+      .grid({ query, depth: 0, path: null, withTotal: true, withCounts, ...win }, c.signal)
       .then((res) => {
         setTops({ [topKey]: { status: 'ok', res } })
         // Branches of earlier queries are no longer reachable.
@@ -86,7 +88,7 @@ export function useHierarchy(query: AnalyticsQuery | null, withCounts = false) {
       if (inflight.current.has(k)) continue
       inflight.current.add(k)
       analyticsService
-        .grid({ query, depth: n.level + 1, path: n.path, withTotal: false, withCounts }, signal)
+        .grid({ query, depth: n.level + 1, path: n.path, withTotal: false, withCounts, ...win }, signal)
         .then((res) => setBranches((b) => ({ ...b, [k]: { status: 'ok', rows: toNodes(res), truncated: res.truncated } })))
         .catch((e: unknown) => {
           if (e instanceof DOMException && e.name === 'AbortError') return
@@ -119,7 +121,7 @@ export function useHierarchy(query: AnalyticsQuery | null, withCounts = false) {
     const parents = visibleNodes.filter((n) => n.level === maxLevel && n.hasChildren)
     if (!parents.length) return
     try {
-      const res = await analyticsService.grid({ query, depth: maxLevel + 1, path: null, withTotal: false, withCounts }, ctl.current?.signal)
+      const res = await analyticsService.grid({ query, depth: maxLevel + 1, path: null, withTotal: false, withCounts, ...win }, ctl.current?.signal)
       if (res.truncated) {
         toast(tr('Level berikutnya berisi lebih dari {0} baris. Buka per cabang atau persempit filter.', res.rows.length.toLocaleString(LOCALE)), 'error')
         return
@@ -151,6 +153,8 @@ export function useHierarchy(query: AnalyticsQuery | null, withCounts = false) {
     error: top?.error ?? null,
     roots: top?.res ? toNodes(top.res) : [],
     total: top?.res?.total ?? null,
+    /** Report date used by the H.I / S.D.H.I / YTD columns (null when none is shown). */
+    reportDate: top?.res?.reportDate ?? null,
     sourceRows: top?.res?.sourceRows ?? null,
     truncated: top?.res?.truncated ?? false,
     expanded,

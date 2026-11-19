@@ -15,7 +15,8 @@
 import type { Dataset, Field, GridAgg, Kpi } from '@/types/contracts'
 import { tr } from '@/i18n'
 
-export type Window = 'cur' | 'prev'
+/** cur = the filter period, prev = same period last year; hi / sdhi / ytd = report-date windows (H.I, S.D.H.I, YTD). */
+export type Window = 'cur' | 'prev' | 'hi' | 'sdhi' | 'ytd'
 export type Category = 'raw' | 'derived' | 'calculated'
 
 export interface CalcMeasure {
@@ -64,6 +65,9 @@ export type DisplayCalc =
   | 'minimum'
   | 'maximum'
   | 'distinct_count'
+  | 'value_hi'
+  | 'value_sdhi'
+  | 'value_ytd'
 
 export interface DisplayCalcDef {
   id: DisplayCalc
@@ -90,8 +94,21 @@ export const DISPLAY_CALCS: DisplayCalcDef[] = [
   { id: 'running_total', label: tr('Running Total'), description: tr('Akumulasi berurutan'), unavailable: tr('Belum tersedia: butuh urutan waktu di grid.'), applies: (d) => d.additive },
   { id: 'minimum', label: tr('Minimum'), description: tr('Nilai baris sumber terkecil'), unavailable: tr('{0} agregasi MIN.', NEEDS_BACKEND), applies: (d) => d.additive },
   { id: 'maximum', label: tr('Maximum'), description: tr('Nilai baris sumber terbesar'), unavailable: tr('{0} agregasi MAX.', NEEDS_BACKEND), applies: (d) => d.additive },
+  // Report-date windows: one measure as several columns (H.I next to S.D.H.I) without another dataset. Ratios and
+  // calculated measures are computed from the numerator/denominator of the same window.
+  { id: 'value_hi', label: tr('H.I'), description: tr('Nilai pada tanggal laporan (hari ini)'), unavailable: null, applies: (d) => !d.comparison },
+  { id: 'value_sdhi', label: tr('S.D.H.I'), description: tr('Akumulasi tanggal 1 bulan tanggal laporan s.d. tanggal laporan'), unavailable: null, applies: (d) => !d.comparison },
+  { id: 'value_ytd', label: tr('S.D. Tahun Ini'), description: tr('Akumulasi 1 Januari s.d. tanggal laporan'), unavailable: null, applies: (d) => !d.comparison },
   { id: 'distinct_count', label: tr('Distinct Count'), description: tr('Jumlah nilai unik'), unavailable: tr('{0} agregasi COUNT DISTINCT.', NEEDS_BACKEND), applies: (d) => d.additive },
 ]
+/** Display calculations read from a report-date window, and that window (the grid asks only for these). */
+export const WINDOW_CALCS: Partial<Record<DisplayCalc, 'hi' | 'sdhi' | 'ytd'>> = { value_hi: 'hi', value_sdhi: 'sdhi', value_ytd: 'ytd' }
+/** Report-date windows needed by the chosen display calculations of all measures. */
+export function windowsOf(settings: Record<string, MeasureSetting | undefined>): ('hi' | 'sdhi' | 'ytd')[] {
+  const w = new Set<'hi' | 'sdhi' | 'ytd'>()
+  for (const st of Object.values(settings)) for (const c of st?.display ?? []) if (WINDOW_CALCS[c]) w.add(WINDOW_CALCS[c]!)
+  return (['hi', 'sdhi', 'ytd'] as const).filter((x) => w.has(x))
+}
 export const DISPLAY_CALC = new Map(DISPLAY_CALCS.map((c) => [c.id, c]))
 
 /** Per-measure presentation chosen in Layout. Absent = raw presentation (Value only, metadata unit). */
@@ -114,7 +131,7 @@ export interface ColumnMeta {
 
 const pct = (a: number | null, b: number | null) => (a == null || b == null || b === 0 ? null : ((a - b) / Math.abs(b)) * 100)
 const div = (a: number | null, b: number | null, scale = 1) => (b ? ((a ?? 0) / b) * scale : null)
-const get = (agg: GridAgg | null, w: Window, id: string) => (agg ? (agg[w][id] ?? null) : null)
+const get = (agg: GridAgg | null, w: Window, id: string) => (agg ? (agg[w]?.[id] ?? null) : null)
 /** Row count of a base measure's source, returned by the grid endpoint under this key. */
 export const countKey = (id: string) => `#count:${id}`
 
@@ -365,6 +382,8 @@ export function createEngine(dataset: Dataset, calcMeasures: CalcMeasure[]): Eng
       if (!d || !usable(id, calc)) return null
       const c = d.value(agg, 'cur', total)
       if (calc === 'value') return c
+      const win = WINDOW_CALCS[calc]
+      if (win) return d.value(agg, win, total)
       if (calc === 'gap') return c == null ? null : c - 100
       if (calc === 'contribution') return div(c, total ? d.value(total, 'cur', total) : null, 100)
       if (calc === 'count') return get(agg, 'cur', countKey(d.id))

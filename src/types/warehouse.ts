@@ -106,7 +106,9 @@ interface MeasureBase {
   description?: string
 }
 export type SemanticMeasure =
-  | (MeasureBase & { type: 'sum' | 'snapshot'; source: string; column: string })
+  | (MeasureBase & { type: 'sum'; source: string; column: string })
+  /** pick: max (default) = largest value per entity in the period; last = value on its latest date, 0 included. */
+  | (MeasureBase & { type: 'snapshot'; source: string; column: string; pick?: 'max' | 'last' })
   | (MeasureBase & { type: 'ratio'; numerator: string; denominator: string; scale: number })
 
 export interface SemanticModel {

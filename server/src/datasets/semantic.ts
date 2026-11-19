@@ -33,10 +33,13 @@ export const MeasureSchema = z.discriminatedUnion('type', [
   /** SUM over the source rows (flows: production, bunches, harvest area, labour). */
   z.object({ ...MeasureBase, type: z.literal('sum'), source: Id, column: z.string().min(1) }),
   /**
-   * Stock values repeated on every daily row (planted area, palm count): taken once per entity
-   * (MAX per entity key within each group) and then summed, so a month does not count the area 30 times.
+   * Stock values repeated on every daily row (planted area, palm count): taken once per entity and then summed,
+   * so a month does not count the area 30 times. pick (per entity, within each period window):
+   *   max  (default) the largest value: right for stock that only grows or stays (area, palms);
+   *   last the value on the entity's latest date in the window, 0 included: right for a daily status (units
+   *        standby / down today), where max would count every unit that was ever standby in the period.
    */
-  z.object({ ...MeasureBase, type: z.literal('snapshot'), source: Id, column: z.string().min(1) }),
+  z.object({ ...MeasureBase, type: z.literal('snapshot'), source: Id, column: z.string().min(1), pick: z.enum(['max', 'last']).optional() }),
   /** numerator / denominator × scale, computed after aggregation (never an average of ratios). */
   z.object({ ...MeasureBase, type: z.literal('ratio'), numerator: Id, denominator: Id, scale: z.number() }),
 ])
