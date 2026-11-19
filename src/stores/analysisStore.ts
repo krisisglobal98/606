@@ -200,7 +200,8 @@ export const useAnalysisStore = create<AnalysisState>()(
           measureLayout: fromMeasures(raw),
           measureSettings: {},
           chartBy: 'trend',
-          table: { ...get().table, freeze: null },
+          // Frozen columns, the matrix column and the transposed view belong to a dataset's layout: they start over.
+          table: { ...get().table, freeze: null, columnDim: null, transpose: false },
           // Each dataset has its own dimensions: scope and filters start empty, the period at month to date.
           scope: {},
           filter: { ...defaultFilter(), fields: {} },
