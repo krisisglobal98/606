@@ -240,7 +240,9 @@ export class DatasetService {
           x.description ??
           (x.type === 'ratio'
             ? `${m.measures.find((y) => y.id === x.numerator)?.label} ÷ ${m.measures.find((y) => y.id === x.denominator)?.label}${x.scale !== 1 ? ` × ${x.scale}` : ''}`
-            : `${x.type === 'snapshot' ? 'Nilai per blok (tidak dijumlah per hari)' : 'SUM'} dari ${m.sources.find((s) => s.alias === x.source)?.label}.${x.column}`),
+            : x.type === 'prorate'
+              ? `${m.measures.find((y) => y.id === x.budget)?.label} sebulan × hari kerja s.d. tanggal laporan ÷ hari kerja sebulan (${m.measures.find((y) => y.id === x.workdays)?.label})`
+              : `${x.type === 'snapshot' ? 'Nilai per blok (tidak dijumlah per hari)' : x.type === 'distinct' ? 'Jumlah nilai unik' : 'SUM'} dari ${m.sources.find((s) => s.alias === x.source)?.label}.${x.column}${x.where ? `, hanya ${x.where.dim} = ${x.where.values.join(' / ')}` : ''}`),
       })),
     ]
   }

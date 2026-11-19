@@ -169,6 +169,6 @@ function columnsFromModel(m: SemanticModel, alias: string) {
   const src = m.sources.find((x) => x.alias === alias)
   if (src) names.add(src.dateColumn)
   m.dimensions.forEach((d) => d.columns[alias] && names.add(d.columns[alias]!))
-  m.measures.forEach((x) => x.type !== 'ratio' && x.source === alias && names.add(x.column))
-  return [...names].map((n) => ({ name: n, dataType: '', typeCategory: n === src?.dateColumn ? ('date' as const) : m.measures.some((x) => x.type !== 'ratio' && x.column === n) ? ('number' as const) : ('string' as const) }))
+  m.measures.forEach((x) => 'source' in x && x.source === alias && names.add(x.column))
+  return [...names].map((n) => ({ name: n, dataType: '', typeCategory: n === src?.dateColumn ? ('date' as const) : m.measures.some((x) => 'column' in x && x.type !== 'distinct' && x.column === n) ? ('number' as const) : ('string' as const) }))
 }

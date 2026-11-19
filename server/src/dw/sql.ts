@@ -57,7 +57,7 @@ export interface SqlDialect {
   /** expr is one of the values of an array parameter. */
   inList(expr: string, arrayParam: string): string
   /** Aggregate, optionally restricted to rows matching `cond` (NULL when no row matched, except COUNT). */
-  agg(fn: 'SUM' | 'MAX' | 'COUNT', expr: string | null, cond?: string | null): string
+  agg(fn: 'SUM' | 'MAX' | 'COUNT' | 'COUNT_DISTINCT', expr: string | null, cond?: string | null): string
   /** expr contains the text of `param` (case-insensitive); the param holds containsValue(text). */
   contains(expr: string, param: string): string
   containsValue(text: string): string
@@ -79,7 +79,7 @@ const postgres: SqlDialect = {
   month: (e) => `to_char(${e}, 'MM')`,
   day: (e) => `to_char(${e}, 'YYYY-MM-DD')`,
   inList: (e, p) => `${e} = ANY(${p})`,
-  agg: (fn, e, cond) => `${fn}(${e ?? '*'})${cond ? ` FILTER (WHERE ${cond})` : ''}`,
+  agg: (fn, e, cond) => `${fn === 'COUNT_DISTINCT' ? `COUNT(DISTINCT ${e})` : `${fn}(${e ?? '*'})`}${cond ? ` FILTER (WHERE ${cond})` : ''}`,
   // ILIKE with the wildcards of the text escaped: "10%" means the characters 1, 0, %.
   contains: (e, p) => `${e} ILIKE ${p}`,
   containsValue: (t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
@@ -98,7 +98,8 @@ const clickhouse: SqlDialect = {
   day: (e) => `formatDateTime(${e}, '%Y-%m-%d')`,
   inList: (e, p) => `has(${p}, ${e})`,
   // -IfOrNull keeps PostgreSQL's "NULL when nothing matched" semantics of SUM/MAX ... FILTER.
-  agg: (fn, e, cond) => (cond ? (fn === 'COUNT' ? `countIf(${cond})` : `${fn.toLowerCase()}IfOrNull(${e}, ${cond})`) : `${fn}(${e ?? '*'})`),
+  agg: (fn, e, cond) =>
+    fn === 'COUNT_DISTINCT' ? (cond ? `uniqExactIf(${e}, ${cond})` : `uniqExact(${e})`) : cond ? (fn === 'COUNT' ? `countIf(${cond})` : `${fn.toLowerCase()}IfOrNull(${e}, ${cond})`) : `${fn}(${e ?? '*'})`,
   contains: (e, p) => `positionCaseInsensitiveUTF8(${e}, ${p}) > 0`,
   containsValue: (t) => t,
   lastBy: (e, o, cond) => (cond ? `argMaxIfOrNull(${e}, ${o}, ${cond})` : `argMaxOrNull(${e}, ${o})`),

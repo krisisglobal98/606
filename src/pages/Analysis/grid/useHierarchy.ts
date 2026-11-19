@@ -21,7 +21,7 @@ export interface Branch {
 }
 
 const keyOf = (path: (string | null)[]) => JSON.stringify(path)
-const toNodes = (r: GridResponse): HNode[] => r.rows.map((x) => ({ key: keyOf(x.path), path: x.path, label: x.label, level: x.path.length - 1, hasChildren: x.hasChildren, agg: { cur: x.cur, prev: x.prev, hi: x.hi, sdhi: x.sdhi, ytd: x.ytd } }))
+const toNodes = (r: GridResponse): HNode[] => r.rows.map((x) => ({ key: keyOf(x.path), path: x.path, label: x.label, level: x.path.length - 1, hasChildren: x.hasChildren, agg: { cur: x.cur, prev: x.prev, hi: x.hi, sdhi: x.sdhi, ytd: x.ytd, mon: x.mon } }))
 const message = (e: unknown) => (e instanceof ApiError ? e.message : tr('Data tabel gagal dimuat.'))
 
 /**

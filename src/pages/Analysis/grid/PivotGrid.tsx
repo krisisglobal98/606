@@ -112,7 +112,7 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
 
   // Values are rounded to the column's decimals before formatting and colouring, so "−0,0" never shows.
   const value = (c: Col, agg: GridAgg) => {
-    const v = engine.cell(c.m, c.calc, agg, total)
+    const v = engine.cell(c.m, c.calc, agg, total, settings[c.m])
     if (v == null || !Number.isFinite(v)) return null
     const f = 10 ** c.meta.decimals
     const r = Math.round(v * f) / f

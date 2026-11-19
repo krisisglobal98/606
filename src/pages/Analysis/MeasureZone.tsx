@@ -249,6 +249,14 @@ function MeasureMenu({ id, field, engine }: { id: string; field: Field; engine: 
               <span>{tr('Satuan')}</span>
               <input className="input" value={setting?.unit ?? ''} placeholder={def?.unit || tr('tanpa satuan')} onChange={(e) => setMeasureSetting(id, { unit: e.target.value || undefined })} />
             </label>
+            <label className={s.mMenuRow} title={tr('Nilai ditampilkan dibagi skala ini; measure-nya tidak berubah')}>
+              <span>{tr('Skala tampilan')}</span>
+              <select className="select select--sm" value={setting?.scale ?? ''} onChange={(e) => setMeasureSetting(id, { scale: e.target.value === '1000' ? 1000 : e.target.value === '1000000' ? 1_000_000 : undefined })}>
+                <option value="">{tr('apa adanya')}</option>
+                <option value="1000">{tr('ribuan (÷ 1.000, mis. Rp 000)')}</option>
+                <option value="1000000">{tr('jutaan (÷ 1.000.000)')}</option>
+              </select>
+            </label>
           </div>
           {setting && (
             <button type="button" className={s.mMenuReset} onClick={() => setMeasureSetting(id, null)}>

@@ -48,6 +48,10 @@ export type FieldKind = z.infer<typeof FieldKindSchema>
 export const MeasureCalcSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('base') }),
   z.object({ kind: z.literal('ratio'), num: z.string(), den: z.string(), scale: z.number() }),
+  /** Distinct count: a base value that does not add up across rows. */
+  z.object({ kind: z.literal('distinct') }),
+  /** Budget pro rata to the report date: budget of the month × working days up to it ÷ working days of the month. */
+  z.object({ kind: z.literal('prorate'), budget: z.string(), workdays: z.string() }),
 ])
 
 export const FieldSchema = z.object({
@@ -237,13 +241,13 @@ export const GridRequestSchema = z.object({
   /** Also return source row counts per base measure ("#count:<id>"), for Count / Average. */
   withCounts: z.boolean().optional(),
   /** Report-date windows: hi = H.I (the report date), sdhi = S.D.H.I (month to the report date), ytd = year to it. */
-  windows: z.array(z.enum(['hi', 'sdhi', 'ytd'])).optional(),
+  windows: z.array(z.enum(['hi', 'sdhi', 'ytd', 'mon'])).optional(),
 })
 export type GridRequest = z.infer<typeof GridRequestSchema>
-export type ReportWindow = 'hi' | 'sdhi' | 'ytd'
+export type ReportWindow = 'hi' | 'sdhi' | 'ytd' | 'mon'
 
 const BaseValuesSchema = z.record(z.string(), z.number().nullable())
-export const GridAggSchema = z.object({ cur: BaseValuesSchema, prev: BaseValuesSchema, hi: BaseValuesSchema.optional(), sdhi: BaseValuesSchema.optional(), ytd: BaseValuesSchema.optional() })
+export const GridAggSchema = z.object({ cur: BaseValuesSchema, prev: BaseValuesSchema, hi: BaseValuesSchema.optional(), sdhi: BaseValuesSchema.optional(), ytd: BaseValuesSchema.optional(), mon: BaseValuesSchema.optional() })
 export type GridAgg = z.infer<typeof GridAggSchema>
 
 export const GridRowSchema = GridAggSchema.extend({

@@ -29,9 +29,15 @@ export const DimensionSchema = z.object({
 
 const MeasureBase = { id: Id, label: z.string().min(1), unit: z.string(), decimals: z.number().int().min(0).max(6), description: z.string().optional() }
 
+/**
+ * Only the rows whose dimension value is in the list count for the measure (e.g. unit-days with status B), so no
+ * derived column per case is needed in the warehouse. The dimension must be mapped in the measure's source.
+ */
+const Where = z.object({ dim: Id, values: z.array(z.string().max(200)).min(1).max(100) }).strict()
+
 export const MeasureSchema = z.discriminatedUnion('type', [
   /** SUM over the source rows (flows: production, bunches, harvest area, labour). */
-  z.object({ ...MeasureBase, type: z.literal('sum'), source: Id, column: z.string().min(1) }),
+  z.object({ ...MeasureBase, type: z.literal('sum'), source: Id, column: z.string().min(1), where: Where.optional() }),
   /**
    * Stock values repeated on every daily row (planted area, palm count): taken once per entity and then summed,
    * so a month does not count the area 30 times. pick (per entity, within each period window):
@@ -39,9 +45,17 @@ export const MeasureSchema = z.discriminatedUnion('type', [
    *   last the value on the entity's latest date in the window, 0 included: right for a daily status (units
    *        standby / down today), where max would count every unit that was ever standby in the period.
    */
-  z.object({ ...MeasureBase, type: z.literal('snapshot'), source: Id, column: z.string().min(1), pick: z.enum(['max', 'last']).optional() }),
+  z.object({ ...MeasureBase, type: z.literal('snapshot'), source: Id, column: z.string().min(1), pick: z.enum(['max', 'last']).optional(), where: Where.optional() }),
+  /** Number of distinct values of a column (e.g. JUMLAH UNIT = distinct unit codes). Not additive across rows. */
+  z.object({ ...MeasureBase, type: z.literal('distinct'), source: Id, column: z.string().min(1), where: Where.optional() }),
   /** numerator / denominator × scale, computed after aggregation (never an average of ratios). */
   z.object({ ...MeasureBase, type: z.literal('ratio'), numerator: Id, denominator: Id, scale: z.number() }),
+  /**
+   * Budget pro rata to the report date (ANG. S.D.H.I): monthly budget x working days up to the report date / working
+   * days of the month. budget = a SUM measure of the monthly budget; workdays = a SUM measure of the working-day flag
+   * of the work calendar (dim_kalender_kerja). Computed per window from the same grid statement.
+   */
+  z.object({ ...MeasureBase, type: z.literal('prorate'), budget: Id, workdays: Id }),
 ])
 
 export const SemanticModelSchema = z.object({
@@ -226,17 +240,19 @@ export function validateModel(m: SemanticModel, tables: TableMetadata[]): string
   }
   for (const me of m.measures) {
     dup(me.id)
-    if (me.type === 'ratio') {
-      for (const ref of [me.numerator, me.denominator]) {
+    if (me.type === 'ratio' || me.type === 'prorate') {
+      for (const ref of me.type === 'ratio' ? [me.numerator, me.denominator] : [me.budget, me.workdays]) {
         const r = m.measures.find((x) => x.id === ref)
         if (!r) out.push(`Measure ${me.label}: "${ref}" tidak ditemukan.`)
-        else if (r.type === 'ratio') out.push(`Measure ${me.label}: rasio harus dibentuk dari measure dasar, bukan rasio lain.`)
+        else if (r.type === 'ratio' || r.type === 'prorate') out.push(`Measure ${me.label}: harus dibentuk dari measure dasar, bukan rasio atau prorata lain.`)
+        else if (me.type === 'prorate' && r.type !== 'sum') out.push(`Measure ${me.label}: anggaran dan hari kerja harus measure SUM.`)
       }
     } else {
+      if (me.where && !m.dimensions.find((d) => d.id === me.where!.dim)?.columns[me.source]) out.push(`Measure ${me.label}: syarat memakai dimensi "${me.where.dim}" yang tidak dipetakan di sumber ${me.source}.`)
       const c = col(me.source, me.column)
       if (!m.sources.some((s) => s.alias === me.source)) out.push(`Measure ${me.label}: sumber "${me.source}" tidak dikenal.`)
       else if (!c) out.push(`Measure ${me.label}: kolom ${table(me.source)?.name ?? me.source}.${me.column} tidak ditemukan.`)
-      else if (c.typeCategory !== 'number') out.push(`Measure ${me.label}: kolom ${me.column} bertipe ${c.dataType}, bukan angka.`)
+      else if (c.typeCategory !== 'number' && me.type !== 'distinct') out.push(`Measure ${me.label}: kolom ${me.column} bertipe ${c.dataType}, bukan angka.`)
       if (me.type === 'snapshot') {
         if (!m.entity.length) out.push(`Measure ${me.label} bertipe snapshot memerlukan kunci entitas (mis. bisnis unit + afdeling + blok).`)
         for (const e of m.entity) if (!m.dimensions.find((d) => d.id === e)?.columns[me.source]) out.push(`Measure ${me.label}: kunci entitas "${e}" tidak dipetakan di sumber ${me.source}.`)

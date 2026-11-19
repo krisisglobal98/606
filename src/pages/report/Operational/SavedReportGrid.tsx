@@ -34,7 +34,7 @@ export function SavedReportGrid({ report, dataset, filter, scope, focus, onToggl
   const query: AnalyticsQuery | null = server.length
     ? { datasetId: dataset.id, scope, filter, dimensions: dims.map((d) => d.id), measures: [...new Set([...server, ...kpiMeasures(dataset, engine)])], chartBy: 'trend' }
     : null
-  const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, state.settings[m]])))
+  const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, state.settings[m]])), measures.some((m) => engine.defs.get(m)?.needsMonth))
   const hier = useHierarchy(query, withCounts, windows)
   return query ? (
     <PivotGrid hier={hier} engine={engine} dims={dims} periodLabel={`${formatDate(filter.dateFrom)} – ${formatDate(filter.dateTo)}${hier.reportDate ? tr(' · tanggal laporan {0}', formatDate(hier.reportDate)) : ''}`} focus={focus} onToggleFocus={onToggleFocus} state={state} onChangeFilter={onChangeFilter} />

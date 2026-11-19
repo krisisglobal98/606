@@ -105,11 +105,20 @@ interface MeasureBase {
   decimals: number
   description?: string
 }
+/** Only rows whose dimension value is in the list count (e.g. status = B). */
+export interface MeasureWhere {
+  dim: string
+  values: string[]
+}
 export type SemanticMeasure =
-  | (MeasureBase & { type: 'sum'; source: string; column: string })
+  | (MeasureBase & { type: 'sum'; source: string; column: string; where?: MeasureWhere })
   /** pick: max (default) = largest value per entity in the period; last = value on its latest date, 0 included. */
-  | (MeasureBase & { type: 'snapshot'; source: string; column: string; pick?: 'max' | 'last' })
+  | (MeasureBase & { type: 'snapshot'; source: string; column: string; pick?: 'max' | 'last'; where?: MeasureWhere })
+  /** Number of distinct values of a column (e.g. units). */
+  | (MeasureBase & { type: 'distinct'; source: string; column: string; where?: MeasureWhere })
   | (MeasureBase & { type: 'ratio'; numerator: string; denominator: string; scale: number })
+  /** Budget pro rata to the report date (budget and workdays are SUM measures). */
+  | (MeasureBase & { type: 'prorate'; budget: string; workdays: string })
 
 export interface SemanticModel {
   version: 1

@@ -114,7 +114,14 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
     k.datasets.fields(d).map((f) => {
       const m = f.kind === 'measure' ? d.semantic.measures.find((x) => x.id === f.id) : undefined
       if (!m) return f
-      return { ...f, calc: m.type === 'ratio' ? { kind: 'ratio' as const, num: m.numerator, den: m.denominator, scale: m.scale } : { kind: 'base' as const } }
+      return {
+        ...f,
+        calc:
+          m.type === 'ratio' ? { kind: 'ratio' as const, num: m.numerator, den: m.denominator, scale: m.scale }
+          : m.type === 'prorate' ? { kind: 'prorate' as const, budget: m.budget, workdays: m.workdays }
+          : m.type === 'distinct' ? { kind: 'distinct' as const }
+          : { kind: 'base' as const },
+      }
     })
   registerAuthRoutes(app, k)
 

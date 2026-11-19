@@ -31,12 +31,13 @@ export const GridRequestSchema = z.object({
   withCounts: z.boolean().optional(),
   /**
    * Report-date windows to return besides the period (cur) and last year (prev), all from the same statement:
-   * hi = the report date (H.I), sdhi = first of its month up to it (S.D.H.I), ytd = first of its year up to it.
+   * hi = the report date (H.I), sdhi = first of its month up to it (S.D.H.I), ytd = first of its year up to it,
+   * mon = its whole month (the monthly budget of a pro-rata measure).
    */
-  windows: z.array(z.enum(['hi', 'sdhi', 'ytd'])).max(3).optional(),
+  windows: z.array(z.enum(['hi', 'sdhi', 'ytd', 'mon'])).max(4).optional(),
 })
 export type GridRequest = z.infer<typeof GridRequestSchema>
-export type ReportWindow = 'hi' | 'sdhi' | 'ytd'
+export type ReportWindow = 'hi' | 'sdhi' | 'ytd' | 'mon'
 
 type Values = Record<string, number | null>
 
@@ -54,6 +55,10 @@ export function reportDateOf(filter: { dateTo: string; reportDate?: string | nul
 /** Date range of a report-date window (inclusive ISO dates). */
 export function reportWindow(id: ReportWindow, reportDate: string): DateWindow {
   if (id === 'hi') return { id, from: reportDate, to: reportDate }
+  if (id === 'mon') {
+    const [y, m] = reportDate.split('-').map(Number)
+    return { id, from: `${reportDate.slice(0, 7)}-01`, to: `${reportDate.slice(0, 7)}-${String(new Date(Date.UTC(y!, m!, 0)).getUTCDate()).padStart(2, '0')}` }
+  }
   return { id, from: id === 'sdhi' ? `${reportDate.slice(0, 7)}-01` : `${reportDate.slice(0, 4)}-01-01`, to: reportDate }
 }
 

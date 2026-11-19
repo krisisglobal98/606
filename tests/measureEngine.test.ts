@@ -105,3 +105,36 @@ test('H.I / S.D.H.I / YTD columns read their own window; a ratio is computed ins
   assert.deepEqual(windowsOf({ a: { display: ['value', 'value_sdhi'] }, b: { display: ['value_hi'] }, c: undefined }), ['hi', 'sdhi'])
   assert.deepEqual(windowsOf({ a: { display: ['value', 'growth_yoy'] } }), [])
 })
+
+// Traksi P3: budget pro rata to the report date, distinct counts, display scale.
+test('ANG. S.D.H.I: monthly budget × working days to the report date ÷ working days of the month; YTD adds earlier months', async () => {
+  const { windowsOf } = await import('@/semantic/measureEngine')
+  const DS = {
+    ...SALES,
+    fields: [
+      { id: 'ang', label: 'Anggaran', kind: 'measure' as const, dataType: 'number' as const, unit: 'Rp', decimals: 0, calc: { kind: 'base' as const } },
+      { id: 'hk', label: 'Hari kerja', kind: 'measure' as const, dataType: 'number' as const, decimals: 0, calc: { kind: 'base' as const } },
+      { id: 'ang_prorata', label: 'ANG. S.D.H.I', kind: 'measure' as const, dataType: 'number' as const, unit: 'Rp', decimals: 0, calc: { kind: 'prorate' as const, budget: 'ang', workdays: 'hk' } },
+      { id: 'unit_unik', label: 'Jumlah unit', kind: 'measure' as const, dataType: 'number' as const, decimals: 0, calc: { kind: 'distinct' as const } },
+    ],
+    kpi: { actual: 'ang', target: null, achievement: null },
+  }
+  const e = createEngine(DS, [])
+  // Month: budget 1000, 25 working days; to the report date 15; on the report date 1; earlier months budget 3000.
+  const row = { cur: { ang: 1000, hk: 25 }, prev: {}, hi: { ang: 0, hk: 1 }, sdhi: { ang: 1000, hk: 15 }, ytd: { ang: 4000, hk: 90 }, mon: { ang: 1000, hk: 25 } }
+  assert.equal(e.cell('ang_prorata', 'value_sdhi', row, row), 600)
+  assert.equal(e.cell('ang_prorata', 'value_hi', row, row), 40)
+  assert.equal(e.cell('ang_prorata', 'value_ytd', row, row), 3600, '3000 of earlier months + 600 of this month')
+  assert.equal(e.cell('ang_prorata', 'value', row, row), 1000, 'the filter period shows the budget as it is')
+  assert.equal(e.cell('ang_prorata', 'value_sdhi', { ...row, mon: undefined }, row), null, 'no month window → no number, never a guess')
+  assert.deepEqual(e.defs.get('ang_prorata')!.needs.sort(), ['ang', 'hk'])
+  assert.deepEqual(windowsOf({ ang_prorata: { display: ['value_sdhi'] } }, true), ['sdhi', 'mon'])
+  assert.deepEqual(windowsOf({ ang_prorata: { display: ['value_hi'] } }, true), ['hi', 'sdhi', 'mon'])
+  // A distinct count is not additive: no Contribution / Count / Average for it.
+  assert.ok(!e.calcsFor('unit_unik').some((c) => c.id === 'contribution' || c.id === 'count'))
+  // Display scale: Rp ÷ 1000 → "Rp 000"; percentages and the measure itself are untouched.
+  assert.equal(e.cell('ang', 'value', row, row, { scale: 1000 }), 1)
+  assert.equal(e.cell('ang_prorata', 'value_sdhi', row, row, { scale: 1000 }), 0.6)
+  assert.equal(e.columnMeta('ang', 'value', { scale: 1000 }).unit, 'Rp 000')
+  assert.equal(e.columnMeta('ang', 'value', { scale: 1_000_000 }).unit, 'Rp juta')
+})

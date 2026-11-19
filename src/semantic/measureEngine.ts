@@ -16,7 +16,7 @@ import type { Dataset, Field, GridAgg, Kpi } from '@/types/contracts'
 import { tr } from '@/i18n'
 
 /** cur = the filter period, prev = same period last year; hi / sdhi / ytd = report-date windows (H.I, S.D.H.I, YTD). */
-export type Window = 'cur' | 'prev' | 'hi' | 'sdhi' | 'ytd'
+export type Window = 'cur' | 'prev' | 'hi' | 'sdhi' | 'ytd' | 'mon'
 export type Category = 'raw' | 'derived' | 'calculated'
 
 export interface CalcMeasure {
@@ -47,6 +47,8 @@ export interface MeasureDef {
   additive: boolean
   /** Built-ins that are already a comparison (no Growth of a growth). */
   comparison?: boolean
+  /** Pro-rata budget: needs the whole month of the report date (window mon) next to H.I / S.D.H.I / YTD. */
+  needsMonth?: boolean
 }
 
 /* ---------------- Display calculation registry ---------------- */
@@ -104,10 +106,12 @@ export const DISPLAY_CALCS: DisplayCalcDef[] = [
 /** Display calculations read from a report-date window, and that window (the grid asks only for these). */
 export const WINDOW_CALCS: Partial<Record<DisplayCalc, 'hi' | 'sdhi' | 'ytd'>> = { value_hi: 'hi', value_sdhi: 'sdhi', value_ytd: 'ytd' }
 /** Report-date windows needed by the chosen display calculations of all measures. */
-export function windowsOf(settings: Record<string, MeasureSetting | undefined>): ('hi' | 'sdhi' | 'ytd')[] {
-  const w = new Set<'hi' | 'sdhi' | 'ytd'>()
+export function windowsOf(settings: Record<string, MeasureSetting | undefined>, needsMonth = false): ('hi' | 'sdhi' | 'ytd' | 'mon')[] {
+  const w = new Set<'hi' | 'sdhi' | 'ytd' | 'mon'>()
   for (const st of Object.values(settings)) for (const c of st?.display ?? []) if (WINDOW_CALCS[c]) w.add(WINDOW_CALCS[c]!)
-  return (['hi', 'sdhi', 'ytd'] as const).filter((x) => w.has(x))
+  // A pro-rata budget reads the whole month (and S.D.H.I for YTD) besides the window it is shown in.
+  if (needsMonth && w.size) w.add('mon').add('sdhi')
+  return (['hi', 'sdhi', 'ytd', 'mon'] as const).filter((x) => w.has(x))
 }
 export const DISPLAY_CALC = new Map(DISPLAY_CALCS.map((c) => [c.id, c]))
 
@@ -117,7 +121,12 @@ export interface MeasureSetting {
   alias?: string
   decimals?: number
   unit?: string
+  /** Display scale: values are shown divided by it (1000 = "Rp 000", 1e6 = "Rp juta"); the measure is unchanged. */
+  scale?: 1000 | 1000000
 }
+
+/** Unit text of a display scale: "Rp" ÷ 1000 → "Rp 000". */
+export const scaledUnit = (unit: string, scale: number | undefined) => (scale === 1000 ? `${unit} 000`.trim() : scale === 1_000_000 ? `${unit} juta`.trim() : unit)
 
 export interface ColumnMeta {
   /** Label of the measure (alias or field label). */
@@ -275,7 +284,8 @@ export interface Engine {
   /** Chosen display calculations, keeping only available ones; [] → ['value']. */
   displays: (id: string, setting: MeasureSetting | undefined) => DisplayCalc[]
   columnMeta: (id: string, calc: DisplayCalc, setting: MeasureSetting | undefined) => ColumnMeta
-  cell: (id: string, calc: DisplayCalc, agg: GridAgg, total: GridAgg | null) => number | null
+  /** setting: its display scale divides value columns (Value, H.I, S.D.H.I, YTD); percentages and counts are not scaled. */
+  cell: (id: string, calc: DisplayCalc, agg: GridAgg, total: GridAgg | null, setting?: MeasureSetting) => number | null
   kpis: (total: GridAgg | null, empty: boolean) => Kpi[]
 }
 
@@ -284,17 +294,29 @@ export function createEngine(dataset: Dataset, calcMeasures: CalcMeasure[]): Eng
   for (const f of dataset.fields.filter((x) => x.kind === 'measure')) {
     const c = f.calc ?? { kind: 'base' as const }
     const unit = f.unit ?? ''
+    // Pro rata to the report date: the month's budget × working days of the window ÷ working days of the month.
+    // YTD = the budget of the earlier months as it is + the current month pro rata. The filter period shows the budget.
+    const prorate = (agg: GridAgg, w: Window): number | null => {
+      if (c.kind !== 'prorate') return null
+      const b = (x: Window) => get(agg, x, c.budget)
+      const wd = (x: Window) => get(agg, x, c.workdays)
+      const part = (x: Window) => (b('mon') == null || !wd('mon') ? null : (b('mon') ?? 0) * ((wd(x) ?? 0) / wd('mon')!))
+      if (w === 'hi' || w === 'sdhi') return part(w)
+      if (w === 'ytd') { const p = part('sdhi'); return p == null ? null : (b('ytd') ?? 0) - (b('mon') ?? 0) + p }
+      return b(w)
+    }
     defs.set(f.id, {
       id: f.id,
       label: f.label,
       unit,
       decimals: f.decimals ?? 1,
-      category: c.kind === 'ratio' ? 'derived' : 'raw',
+      category: c.kind === 'ratio' || c.kind === 'prorate' ? 'derived' : 'raw',
       description: f.description,
-      needs: [f.id],
-      value: c.kind === 'ratio' ? (agg, w) => div(get(agg, w, c.num), get(agg, w, c.den), c.scale) : (agg, w) => get(agg, w, f.id),
+      needs: c.kind === 'prorate' ? [c.budget, c.workdays] : [f.id],
+      value: c.kind === 'ratio' ? (agg, w) => div(get(agg, w, c.num), get(agg, w, c.den), c.scale) : c.kind === 'prorate' ? prorate : (agg, w) => get(agg, w, f.id),
       percentLike: unit === '%',
       additive: c.kind === 'base',
+      needsMonth: c.kind === 'prorate',
     })
   }
 
@@ -367,7 +389,7 @@ export function createEngine(dataset: Dataset, calcMeasures: CalcMeasure[]): Eng
       const d = defs.get(id)
       const measureLabel = setting?.alias?.trim() || d?.label || id
       const calcLabel = DISPLAY_CALC.get(calc)?.label ?? calc
-      const unit = setting?.unit ?? d?.unit ?? ''
+      const unit = scaledUnit(setting?.unit ?? d?.unit ?? '', setting?.scale)
       const decimals = setting?.decimals ?? d?.decimals ?? 1
       if (calc === 'growth_yoy') return d?.percentLike ? { measureLabel, calcLabel, unit: 'pp', decimals: 1, signed: true } : { measureLabel, calcLabel, unit: '%', decimals: 1, signed: true }
       if (calc === 'contribution') return { measureLabel, calcLabel, unit: '%', decimals: 1, signed: false }
@@ -377,13 +399,15 @@ export function createEngine(dataset: Dataset, calcMeasures: CalcMeasure[]): Eng
       // Built-in comparisons (growth, variance %, gap) read with a sign; shares do not.
       return { measureLabel, calcLabel, unit, decimals, signed: !!d?.comparison && d.id !== `${DERIVED_PREFIX}contribution` }
     },
-    cell: (id, calc, agg, total) => {
+    cell: (id, calc, agg, total, setting) => {
       const d = defs.get(id)
       if (!d || !usable(id, calc)) return null
+      const k = setting?.scale ?? 1
+      const sc = (v: number | null) => (v == null || k === 1 ? v : v / k)
       const c = d.value(agg, 'cur', total)
-      if (calc === 'value') return c
+      if (calc === 'value') return sc(c)
       const win = WINDOW_CALCS[calc]
-      if (win) return d.value(agg, win, total)
+      if (win) return sc(d.value(agg, win, total))
       if (calc === 'gap') return c == null ? null : c - 100
       if (calc === 'contribution') return div(c, total ? d.value(total, 'cur', total) : null, 100)
       if (calc === 'count') return get(agg, 'cur', countKey(d.id))

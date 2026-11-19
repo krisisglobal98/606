@@ -194,6 +194,8 @@ export class AnalyticsService {
     /* ---------- measure evaluation ---------- */
     const evalMeasure = (row: Record<string, unknown>, id: string, w: string, q = main): Num => {
       const me = b.measure(id)
+      // Prorata in the summary (one period): the budget of the period as it is (pro rata needs the report-date windows).
+      if (me.type === 'prorate') return num(row[q.col(me.budget, w)])
       if (me.type !== 'ratio') return num(row[q.col(id, w)])
       const nu = num(row[q.col(me.numerator, w)])
       const de = num(row[q.col(me.denominator, w)])

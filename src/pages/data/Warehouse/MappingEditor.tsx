@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft, ArrowRight, GripVertical, Plus, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/common/Button'
-import type { SemanticMeasure, SemanticModel, TypeCategory } from '@/types/warehouse'
+import type { MeasureWhere, SemanticMeasure, SemanticModel, TypeCategory } from '@/types/warehouse'
 import s from './Warehouse.module.css'
 import { tr } from '@/i18n'
 
@@ -28,7 +28,9 @@ export function localProblems(m: SemanticModel): string[] {
   for (const d of m.dimensions) if (!Object.values(d.columns).some(Boolean)) out.push(tr('Dimensi {0} belum dipetakan ke kolom.', d.label))
   for (const x of m.measures) {
     if (x.type === 'ratio' && (!m.measures.some((y) => y.id === x.numerator && y.type !== 'ratio') || !m.measures.some((y) => y.id === x.denominator && y.type !== 'ratio'))) out.push(tr('Rasio {0}: pembilang/penyebut harus measure dasar.', x.label))
-    if (x.type !== 'ratio' && !x.column) out.push(tr('Measure {0}: kolom belum dipilih.', x.label))
+    if ((x.type === 'sum' || x.type === 'snapshot' || x.type === 'distinct') && !x.column) out.push(tr('Measure {0}: kolom belum dipilih.', x.label))
+    if ((x.type === 'sum' || x.type === 'snapshot' || x.type === 'distinct') && x.where && (!x.where.dim || !x.where.values.length)) out.push(tr('Measure {0}: syarat belum lengkap (pilih dimensi dan isi nilainya).', x.label))
+    if (x.type === 'prorate' && (!m.measures.some((y) => y.id === x.budget && y.type === 'sum') || !m.measures.some((y) => y.id === x.workdays && y.type === 'sum'))) out.push(tr('Anggaran prorata {0}: anggaran dan hari kerja harus measure SUM.', x.label))
     if (x.type === 'snapshot' && !m.entity.length) out.push(tr('Measure {0} (snapshot) memerlukan kunci entitas.', x.label))
   }
   if (!m.measures.some((x) => x.id === m.kpi.actual)) out.push(tr('Pilih measure KPI aktual.'))
@@ -45,7 +47,9 @@ export function MappingEditor({ model, tables, onChange, readOnly }: { model: Se
   const cols = (alias: string) => tables.find((t) => t.name === m.sources.find((x) => x.alias === alias)?.table)?.columns ?? []
   const set = (p: Partial<SemanticModel>) => onChange({ ...m, ...p })
   const dims = [...TIME_DIMS, ...m.dimensions.map((d) => ({ id: d.id, label: d.label }))]
-  const baseMeasures = m.measures.filter((x) => x.type !== 'ratio')
+  const baseMeasures = m.measures.filter((x) => x.type !== 'ratio' && x.type !== 'prorate')
+  // Parts of a ratio or a pro-rata budget: SUM / snapshot measures (a distinct count is not divisible that way).
+  const sums = baseMeasures.filter((x) => x.type !== 'distinct')
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
   const setMeasure = (i: number, x: SemanticMeasure) => set({ measures: m.measures.map((y, j) => (j === i ? x : y)) })
   const dis = readOnly
@@ -137,14 +141,25 @@ export function MappingEditor({ model, tables, onChange, readOnly }: { model: Se
                 <td>
                   <select className="select select--sm" value={x.type} onChange={(e) => {
                     const t = e.target.value as SemanticMeasure['type']
-                    if (t === 'ratio') setMeasure(i, { id: x.id, label: x.label, unit: x.unit, decimals: x.decimals, type: 'ratio', numerator: baseMeasures[0]?.id ?? '', denominator: baseMeasures[1]?.id ?? baseMeasures[0]?.id ?? '', scale: 1 })
-                    else setMeasure(i, { id: x.id, label: x.label, unit: x.unit, decimals: x.decimals, type: t, source: x.type === 'ratio' ? m.sources[0]!.alias : x.source, column: x.type === 'ratio' ? '' : x.column })
+                    const head = { id: x.id, label: x.label, unit: x.unit, decimals: x.decimals }
+                    const src = 'source' in x ? x.source : m.sources[0]!.alias
+                    const column = 'column' in x ? x.column : ''
+                    if (t === 'ratio') setMeasure(i, { ...head, type: 'ratio', numerator: sums[0]?.id ?? '', denominator: sums[1]?.id ?? sums[0]?.id ?? '', scale: 1 })
+                    else if (t === 'prorate') setMeasure(i, { ...head, type: 'prorate', budget: sums[0]?.id ?? '', workdays: sums[1]?.id ?? sums[0]?.id ?? '' })
+                    else if (t === 'snapshot') setMeasure(i, { ...head, type: 'snapshot', source: src, column })
+                    else setMeasure(i, { ...head, type: t, source: src, column })
                   }} aria-label={tr('Jenis {0}', x.label)}>
-                    <option value="sum">{tr('SUM')}</option><option value="snapshot">{tr('Snapshot')}</option><option value="ratio">{tr('Rasio')}</option>
+                    <option value="sum">{tr('SUM')}</option><option value="snapshot">{tr('Snapshot')}</option><option value="distinct">{tr('Hitung unik')}</option><option value="ratio">{tr('Rasio')}</option><option value="prorate">{tr('Anggaran prorata')}</option>
                   </select>
                 </td>
                 <td>
-                  {x.type === 'ratio' ? (
+                  {x.type === 'prorate' ? (
+                    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <select className="select select--sm" value={x.budget} onChange={(e) => setMeasure(i, { ...x, budget: e.target.value })} aria-label={tr('Anggaran sebulan')}>{sums.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</select>
+                      {tr('× hari kerja s.d. tanggal laporan ÷ sebulan, dari')}
+                      <select className="select select--sm" value={x.workdays} onChange={(e) => setMeasure(i, { ...x, workdays: e.target.value })} aria-label={tr('Hari kerja (kalender kerja)')}>{sums.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</select>
+                    </span>
+                  ) : x.type === 'ratio' ? (
                     <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                       <select className="select select--sm" value={x.numerator} onChange={(e) => setMeasure(i, { ...x, numerator: e.target.value })} aria-label={tr('Pembilang')}>{baseMeasures.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</select>
                       ÷
@@ -157,8 +172,9 @@ export function MappingEditor({ model, tables, onChange, readOnly }: { model: Se
                       <select className="select select--sm" value={x.source} onChange={(e) => setMeasure(i, { ...x, source: e.target.value, column: '' })} aria-label={tr('Sumber measure')}>{m.sources.map((src) => <option key={src.alias} value={src.alias}>{src.label}</option>)}</select>
                       <select className="select select--sm" value={x.column} onChange={(e) => setMeasure(i, { ...x, column: e.target.value })} aria-label={tr('Kolom measure')}>
                         <option value="">{tr('— pilih kolom —')}</option>
-                        {cols(x.source).filter((c) => c.typeCategory === 'number').map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                        {cols(x.source).filter((c) => x.type === 'distinct' || c.typeCategory === 'number').map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
                       </select>
+                      <WhereEditor where={x.where} dims={m.dimensions.filter((d) => d.columns[x.source])} label={x.label} onChange={(where) => setMeasure(i, { ...x, where })} />
                       {x.type === 'snapshot' && (
                         <select className="select select--sm" value={x.pick ?? 'max'} onChange={(e) => setMeasure(i, { ...x, pick: e.target.value === 'last' ? 'last' : undefined })} aria-label={tr('Cara ambil snapshot {0}', x.label)} title={tr('Nilai terbesar: luas, jumlah pokok. Nilai tanggal terakhir: status harian (unit standby/rusak pada tanggal laporan), termasuk nilai 0.')}>
                           <option value="max">{tr('nilai terbesar')}</option>
@@ -272,5 +288,38 @@ function OrderedPicker({ label, options, value, onChange, disabled }: { label: s
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Optional condition of a measure: only rows whose dimension value is in the list count (e.g. Status = B), so the
+ * warehouse needs no derived column per case. Values are typed separated by commas.
+ */
+function WhereEditor({ where, dims, label, onChange }: { where: MeasureWhere | undefined; dims: { id: string; label: string }[]; label: string; onChange: (w: MeasureWhere | undefined) => void }) {
+  if (!where)
+    return (
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => onChange({ dim: dims[0]?.id ?? '', values: [] })} disabled={!dims.length} title={tr('Hanya baris dengan nilai dimensi tertentu yang dihitung (mis. Status = B)')}>
+        {tr('+ syarat')}
+      </button>
+    )
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+      {tr('hanya jika')}
+      <select className="select select--sm" value={where.dim} onChange={(e) => onChange({ ...where, dim: e.target.value })} aria-label={tr('Dimensi syarat {0}', label)}>
+        {dims.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+      </select>
+      =
+      <input
+        className="input"
+        style={{ height: 30, width: 140, minWidth: 0 }}
+        defaultValue={where.values.join(', ')}
+        placeholder={tr('nilai, pisahkan koma')}
+        onBlur={(e) => onChange({ ...where, values: [...new Set(e.target.value.split(',').map((v) => v.trim()).filter(Boolean))] })}
+        aria-label={tr('Nilai syarat {0}', label)}
+      />
+      <button type="button" className="icon-btn" onClick={() => onChange(undefined)} aria-label={tr('Hapus syarat {0}', label)}>
+        <Trash2 size={13} />
+      </button>
+    </span>
   )
 }

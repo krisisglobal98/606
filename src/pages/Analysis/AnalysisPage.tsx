@@ -208,7 +208,7 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
   const gridMeasures = engine && dataset ? [...new Set([...serverMeasures, ...kpiMeasures(dataset, engine)])] : []
   const withCounts = measures.some((m) => measureSettings[m]?.display?.some((c) => c === 'count' || c === 'average'))
   const gridQuery: AnalyticsQuery | null = query ? { ...query, measures: gridMeasures, dimensions: dimensions.map((d) => d.id), chartBy: 'trend' } : null
-  const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, measureSettings[m]])))
+  const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, measureSettings[m]])), measures.some((m) => engine?.defs.get(m)?.needsMonth))
   const hier = useHierarchy(gridQuery, withCounts, windows)
   const key = JSON.stringify(query)
   const fetcher = useCallback((signal: AbortSignal) => (query ? analyticsService.query(query, signal) : Promise.resolve(null)), [key]) // eslint-disable-line react-hooks/exhaustive-deps

@@ -55,6 +55,9 @@ export interface BuiltQuery {
   sources: SemanticSource[]
 }
 
+/** Measures read from a column (sum, snapshot, distinct); ratio and prorate are computed from them. */
+type BaseMeasure = Exclude<SemanticMeasure, { type: 'ratio' | 'prorate' }>
+
 export const dimCol = (i: number) => `d${i}`
 const mcol = (id: string, w: string) => `m_${id}__${w}`
 const ncol = (alias: string, w: string) => `n_${alias}__${w}`
@@ -72,6 +75,20 @@ export class SqlBuilder {
     this.dialect = dialect
   }
 
+  /**
+   * Row value of a base measure in src_r: the number (sum / snapshot) or the text (distinct), and NULL for rows outside
+   * the measure's condition. Condition values are bind parameters.
+   */
+  private measureExpr(s: SemanticSource, m: BaseMeasure, p: ReturnType<SqlDialect['params']>): string {
+    const D = this.dialect
+    const c = quoteIdent(this.column(s, m.column).name)
+    const v = m.type === 'distinct' ? D.toText(c) : D.toFloat(c)
+    if (!m.where) return v
+    const e = this.filterExpr(s, m.where.dim)
+    if (e == null) throw new AppError(400, 'DIMENSION_NOT_AVAILABLE', `Syarat measure ${m.label} memakai ${this.dimLabel(m.where.dim)}, yang tidak dipetakan di sumber ${s.label}.`)
+    return `CASE WHEN ${D.inList(e, p.add(m.where.values, 'text[]'))} THEN ${v} END`
+  }
+
   measure(id: string): SemanticMeasure {
     const m = this.model.measures.find((x) => x.id === id)
     if (!m) throw new AppError(400, 'UNKNOWN_MEASURE', `Measure "${id}" tidak ada di dataset ini.`)
@@ -84,6 +101,7 @@ export class SqlBuilder {
     for (const id of ids) {
       const m = this.measure(id)
       if (m.type === 'ratio') out.add(m.numerator).add(m.denominator)
+      else if (m.type === 'prorate') out.add(m.budget).add(m.workdays)
       else out.add(m.id)
     }
     return [...out]
@@ -136,7 +154,7 @@ export class SqlBuilder {
   build(r: AggregateRequest): BuiltQuery {
     const D = this.dialect
     const p = D.params()
-    const base = r.measures.map((id) => this.measure(id)).filter((m): m is Exclude<SemanticMeasure, { type: 'ratio' }> => m.type !== 'ratio')
+    const base = r.measures.map((id) => this.measure(id)).filter((m): m is BaseMeasure => m.type !== 'ratio' && m.type !== 'prorate')
     const aliases = [...new Set(base.map((m) => m.source))]
     if (!aliases.length) aliases.push(this.source(this.model.sources[0]!.alias).alias)
     const sources = aliases.map((a) => this.source(a))
@@ -179,7 +197,7 @@ export class SqlBuilder {
         ...dims.map((e, i) => `${e} AS ${dimCol(i)}`),
         ...entity.map((e, i) => `${e} AS e${i}`),
         `${dc} AS dt`,
-        ...ms.map((m) => `${D.toFloat(quoteIdent(this.column(s, m.column).name))} AS ${quoteIdent(`c_${m.id}`)}`),
+        ...ms.map((m) => `${this.measureExpr(s, m, p)} AS ${quoteIdent(`c_${m.id}`)}`),
       ]
       ctes.push(`${s.alias}_r AS (SELECT ${proj.join(', ')} FROM ${t} WHERE ${where.join(' AND ')})`)
 
@@ -189,6 +207,8 @@ export class SqlBuilder {
       const dimOut = r.dims.map((d, i) => (d === 'tanggal' && D.monthKey && D.monthKeyText ? `${D.monthKeyText(dimCol(i))} AS ${dimCol(i)}` : dimCol(i)))
       const sets = `GROUPING SETS (${r.groupingSets.map((g) => `(${g.map(dimCol).join(', ')})`).join(', ')})`
       const grouping = n ? `GROUPING(${dimList.join(', ')})` : '0'
+      if (snapshot && ms.some((m) => m.type === 'distinct'))
+        throw new AppError(400, 'MEASURE_COMBINATION', `Measure hitung unik tidak dapat ditampilkan bersama measure snapshot dari sumber ${s.label} dalam satu tabel. Tampilkan salah satunya saja, atau buat laporan terpisah.`)
       if (snapshot) {
         const eList = entity.map((_, i) => `e${i}`)
         const inner = [
@@ -207,7 +227,7 @@ export class SqlBuilder {
         const outer = [...dimOut, `${grouping} AS g`, ...winParams.flatMap((w) => [...ms.map((m) => `SUM(${quoteIdent(mcol(m.id, w.id))}) AS ${quoteIdent(mcol(m.id, w.id))}`), `SUM(${quoteIdent(ncol(s.alias, w.id))}) AS ${quoteIdent(ncol(s.alias, w.id))}`])]
         ctes.push(`${s.alias}_a AS (SELECT ${outer.join(', ')} FROM ${s.alias}_e GROUP BY ${sets})`)
       } else {
-        const outer = [...dimOut, `${grouping} AS g`, ...winParams.flatMap((w) => [...ms.map((m) => `${D.agg('SUM', quoteIdent(`c_${m.id}`), win(w))} AS ${quoteIdent(mcol(m.id, w.id))}`), `${D.agg('COUNT', null, win(w))} AS ${quoteIdent(ncol(s.alias, w.id))}`])]
+        const outer = [...dimOut, `${grouping} AS g`, ...winParams.flatMap((w) => [...ms.map((m) => `${D.agg(m.type === 'distinct' ? 'COUNT_DISTINCT' : 'SUM', quoteIdent(`c_${m.id}`), win(w))} AS ${quoteIdent(mcol(m.id, w.id))}`), `${D.agg('COUNT', null, win(w))} AS ${quoteIdent(ncol(s.alias, w.id))}`])]
         ctes.push(`${s.alias}_a AS (SELECT ${outer.join(', ')} FROM ${s.alias}_r GROUP BY ${sets})`)
       }
     }
