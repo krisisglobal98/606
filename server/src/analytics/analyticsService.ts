@@ -29,6 +29,29 @@ const ISO = z
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s
   }, 'tanggal tidak valid')
 
+/**
+ * A value filter of one dimension: a value (=), a list (any of them), or { like } (the value contains the text,
+ * case-insensitive). null / empty list = no filter.
+ */
+const FieldFilterSchema = z.union([
+  z.string().max(200),
+  z.array(z.string().max(200)).max(500),
+  z.object({ like: z.string().trim().min(1).max(100) }).strict(),
+]).nullable()
+export type FieldFilter = z.infer<typeof FieldFilterSchema>
+
+/** Value filters of a query, in the SqlBuilder's form (they only narrow; the data access scope decides first). */
+export function fieldFilters(fields: Record<string, FieldFilter> | undefined): { dim: string; values?: string[]; like?: string }[] {
+  const out: { dim: string; values?: string[]; like?: string }[] = []
+  for (const [dim, v] of Object.entries(fields ?? {})) {
+    if (v == null || v === '') continue
+    if (typeof v === 'string') out.push({ dim, values: [v] })
+    else if (Array.isArray(v)) { if (v.length) out.push({ dim, values: [...new Set(v)] }) }
+    else out.push({ dim, like: v.like })
+  }
+  return out
+}
+
 export const AnalyticsQuerySchema = z.object({
   datasetId: z.string().min(1),
   scope: z.record(z.string(), z.array(z.string().max(200)).max(500)).default({}),
@@ -37,7 +60,7 @@ export const AnalyticsQuerySchema = z.object({
     dateTo: ISO,
     /** Report date (tanggal laporan) of the H.I / S.D.H.I / YTD windows; null or absent = min(dateTo, today). */
     reportDate: ISO.nullable().optional(),
-    fields: z.record(z.string(), z.string().max(200).nullable()).optional(),
+    fields: z.record(z.string(), FieldFilterSchema).optional(),
   }).passthrough(),
   // Bounded by what a dataset defines (validated against the semantic model), not by a fixed count.
   // 31: PostgreSQL GROUPING() takes at most 31 arguments (one per hierarchy level).
@@ -142,9 +165,9 @@ export class AnalyticsService {
     if (dims.length !== input.dimensions.length) throw badRequest('UNKNOWN_DIMENSION', 'Ada dimensi yang tidak dikenal di dataset ini.')
     const measures = input.measures.map((id) => b.measure(id))
     if (input.filter.dateFrom > input.filter.dateTo) throw badRequest('INVALID_PERIOD', 'Tanggal mulai harus sebelum tanggal akhir.')
-    const filters: { dim: string; values: string[] }[] = []
+    const filters: { dim: string; values?: string[]; like?: string }[] = []
     for (const [dim, values] of Object.entries(input.scope)) if (values.length) filters.push({ dim, values })
-    for (const [dim, v] of Object.entries(input.filter.fields ?? {})) if (v) filters.push({ dim, values: [v] })
+    filters.push(...fieldFilters(input.filter.fields))
     for (const f of filters) if (!m.dimensions.some((x) => x.id === f.dim)) throw badRequest('UNKNOWN_DIMENSION', `Filter "${f.dim}" bukan dimensi dataset ini.`)
 
     const cur: DateWindow = { id: 'cur', from: input.filter.dateFrom, to: input.filter.dateTo }

@@ -1,0 +1,372 @@
+openapi: 3.1.0
+info:
+  title: DOD Minimal API
+  version: 0.2.0
+  description: |
+    API of DOD Minimal (Daily Operation Discovery). Every route except /api/auth/login and /api/health* needs
+    `Authorization: Bearer <token>` from /api/auth/login. Access is decided per request, in this order:
+    menu permission of the role (Settings → Hak Akses Menu), then the data access of the user (9 levels,
+    docs/DATA_ACCESS.md). Errors are JSON: `{ "error": { "code": "...", "message": "..." } }`; the message is
+    written for the user (Indonesian) and names the cause and what to do.
+
+    Kept in step with the code: server/test/dataAccessProfile.test.ts fails when a route is missing here.
+servers:
+  - url: http://10.110.1.2:8100
+    description: Production (IIS → API on 127.0.0.1:8181)
+security:
+  - bearer: []
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: INVALID_PATH }
+            message: { type: string }
+    IsoDate:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}$'
+      description: A real calendar date (2026-02-30 is refused with 400).
+      example: '2026-01-20'
+    Filter:
+      type: object
+      required: [dateFrom, dateTo]
+      properties:
+        dateFrom: { $ref: '#/components/schemas/IsoDate' }
+        dateTo: { $ref: '#/components/schemas/IsoDate' }
+        reportDate:
+          description: |
+            Tanggal laporan of the H.I / S.D.H.I / YTD windows. null or absent = min(dateTo, today).
+          oneOf: [{ $ref: '#/components/schemas/IsoDate' }, { type: 'null' }]
+        fields:
+          type: object
+          description: |
+            Value filters by dimension id. A string = that value; an array = any of the values (in);
+            `{ "like": "text" }` = the value contains the text (case-insensitive). null = no filter.
+          additionalProperties:
+            oneOf:
+              - { type: string, maxLength: 200 }
+              - { type: array, items: { type: string, maxLength: 200 }, maxItems: 500 }
+              - { type: object, properties: { like: { type: string, minLength: 1, maxLength: 100 } }, required: [like] }
+              - { type: 'null' }
+          example: { sub_group_code: ['Dump Truck', 'Tractor'], vehicle_code: { like: 'DT-0' } }
+    AnalyticsQuery:
+      type: object
+      required: [datasetId, filter, dimensions, measures, chartBy]
+      properties:
+        datasetId: { type: string, example: wh-8a1edf7293 }
+        scope:
+          type: object
+          description: Multi-value lists by dimension id (Batasan data). They only narrow what the user's access allows.
+          additionalProperties: { type: array, items: { type: string } }
+        filter: { $ref: '#/components/schemas/Filter' }
+        dimensions:
+          type: array
+          maxItems: 31
+          items: { type: string }
+          description: Row hierarchy, outermost first (dimension ids of the dataset, or tanggal / bulan / hari).
+          example: [sub_group_code]
+        measures:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: Base measure ids of the dataset (a ratio needs its numerator and denominator).
+          example: [n_beroperasi, n_standby, n_rusak, n_siap, unit_hari]
+        chartBy: { type: string, description: '"trend" or a dimension id', example: trend }
+    BaseValues:
+      type: object
+      additionalProperties: { type: [number, 'null'] }
+      description: Base measure id → value; "#count:<id>" = source rows behind it (withCounts).
+    GridAgg:
+      type: object
+      required: [cur, prev]
+      properties:
+        cur: { $ref: '#/components/schemas/BaseValues' }
+        prev: { $ref: '#/components/schemas/BaseValues' }
+        hi: { $ref: '#/components/schemas/BaseValues' }
+        sdhi: { $ref: '#/components/schemas/BaseValues' }
+        ytd: { $ref: '#/components/schemas/BaseValues' }
+    GridRequest:
+      type: object
+      required: [query, depth, path, withTotal]
+      properties:
+        query: { $ref: '#/components/schemas/AnalyticsQuery' }
+        depth:
+          type: integer
+          minimum: 0
+          description: Index into query.dimensions of the level to return (0 = outermost).
+        path:
+          type: [array, 'null']
+          items: { type: [string, 'null'] }
+          description: |
+            Parent values, one per level ABOVE depth (so its length equals depth), exactly as an earlier response
+            returned them in rows[].path. null = every parent of that level (depth 0, or Expand All).
+            Wrong length → 400 INVALID_PATH (the message shows the expected shape); a null value → 400 NULL_PATH.
+        withTotal: { type: boolean, description: Also return the grand total (first page of a query). }
+        withCounts: { type: boolean, description: 'Also return "#count:<id>" (for Count / Average columns).' }
+        windows:
+          type: array
+          items: { type: string, enum: [hi, sdhi, ytd] }
+          description: |
+            Report-date windows besides the period (cur) and last year (prev), from the same statement:
+            hi = the report date (H.I), sdhi = the 1st of its month up to it (S.D.H.I), ytd = 1 January up to it.
+      examples:
+        top:
+          summary: Top level with H.I and S.D.H.I on 20 Jan 2026
+          value:
+            query: { datasetId: wh-8a1edf7293, scope: {}, filter: { dateFrom: '2026-01-01', dateTo: '2026-01-31', reportDate: '2026-01-20' }, dimensions: [sub_group_code, vehicle_code], measures: [n_beroperasi, n_standby, n_rusak], chartBy: trend }
+            depth: 0
+            path: null
+            withTotal: true
+            windows: [hi, sdhi]
+        children:
+          summary: Units under the Dump Truck row (depth 1, path of length 1)
+          value:
+            query: { datasetId: wh-8a1edf7293, scope: {}, filter: { dateFrom: '2026-01-01', dateTo: '2026-01-31' }, dimensions: [sub_group_code, vehicle_code], measures: [n_beroperasi], chartBy: trend }
+            depth: 1
+            path: [Dump Truck]
+            withTotal: false
+    SavedLayout:
+      type: object
+      required: [scope, filter, dimensions, measureLayout, measureSettings, chartType, chartBy, table]
+      properties:
+        scope: { type: object }
+        filter: { type: object }
+        dimensions: { type: array, items: { type: string } }
+        measureLayout: { type: array, items: {} }
+        measureSettings: { type: object }
+        chartType: { type: string }
+        chartBy: { type: string }
+        table: { type: object }
+        calc: { type: array, items: {} }
+    SavedReport:
+      type: object
+      properties:
+        id: { type: string, example: srp-1a2b3c4d5e6f }
+        name: { type: string }
+        categoryId: { type: [string, 'null'] }
+        datasetId: { type: string }
+        datasetName: { type: [string, 'null'] }
+        layout: { $ref: '#/components/schemas/SavedLayout' }
+        createdBy: { type: [string, 'null'] }
+        createdByName: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+  responses:
+    Error:
+      description: Refused or failed (see error.code / error.message).
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+paths:
+  /api/auth/login:
+    post:
+      summary: Sign in (one device, one user)
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+                takeOver: { type: boolean, description: Sign the other user of this device out first (409 DEVICE_IN_USE otherwise). }
+      responses:
+        '200': { description: '{ token, expiresAt, user }' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/auth/me:
+    get: { summary: The signed-in user and their menus, responses: { '200': { description: User } } }
+  /api/auth/password:
+    post: { summary: Change own password, responses: { '204': { description: Changed } } }
+  /api/auth/logout:
+    post: { summary: End this session, responses: { '204': { description: Signed out } } }
+  /api/health:
+    get: { summary: API alive, security: [], responses: { '200': { description: OK } } }
+  /api/health/database:
+    get: { summary: DOD database reachable, security: [], responses: { '200': { description: OK } } }
+  /api/health/datawarehouse:
+    get: { summary: Source connections (SELECT 1 each, summary without sign-in), security: [], responses: { '200': { description: OK } } }
+
+  /api/dw/catalog:
+    get:
+      summary: Datasets for Analisis/Laporan, with the user's access status; no source query (coverage null until chosen)
+      responses: { '200': { description: '{ datasets: [...] }' } }
+  /api/dw/catalog/{id}:
+    get:
+      summary: The chosen dataset with its date coverage (of the user's rows) and source state
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Dataset }, '404': { $ref: '#/components/responses/Error' } }
+  /api/dw/analytics/query:
+    post:
+      summary: Summary and chart of a query (KPI tiles, Hasil Analisis)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AnalyticsQuery' } } } }
+      responses: { '200': { description: Result }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' } }
+  /api/dw/analytics/grid:
+    post:
+      summary: One level of the result table (lazy hierarchy), with period, last year and report-date windows
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GridRequest' }
+      responses:
+        '200':
+          description: Rows of the level
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depth: { type: integer }
+                  rows:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/GridAgg'
+                        - type: object
+                          properties:
+                            path: { type: array, items: { type: [string, 'null'] }, description: Values from level 0 to this row (use as the next request's path) }
+                            label: { type: string }
+                            hasChildren: { type: boolean }
+                  total: { oneOf: [{ $ref: '#/components/schemas/GridAgg' }, { type: 'null' }] }
+                  truncated: { type: boolean, description: More than 5000 rows at this level }
+                  sourceRows: { type: [integer, 'null'] }
+                  reportDate: { $ref: '#/components/schemas/IsoDate' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/dw/datasets/{id}/values:
+    get:
+      summary: Distinct values of a dimension inside the user's access (filter lists)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: field, in: query, required: true, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string }, description: Search text }
+      responses: { '200': { description: '{ values, truncated }' } }
+  /api/dw/query-log:
+    get: { summary: Source query log (Settings › Log Query, admins), responses: { '200': { description: Page and summary } } }
+
+  /api/dw/connections:
+    get: { summary: Connections from .env (names only), responses: { '200': { description: List } } }
+  /api/dw/connections/{id}/schemas:
+    get: { summary: Schemas of a connection (?fresh=1 reads again), responses: { '200': { description: List } } }
+  /api/dw/connections/{id}/schemas/{schema}/tables:
+    get: { summary: Tables and views of a schema (?fresh=1 reads again), responses: { '200': { description: List } } }
+  /api/dw/connections/{id}/schemas/{schema}/tables/{table}/columns:
+    get:
+      summary: Columns of a table or view, read from pg_attribute (generated columns included; no ANALYZE needed)
+      parameters:
+        - { name: fresh, in: query, schema: { type: string, enum: ['1'] }, description: 'Read now instead of the 60-second cache; also refreshes the metadata the dataset queries use' }
+      responses: { '200': { description: Columns } }
+  /api/dw/datasets:
+    get: { summary: Datasets (Data → Set Data), responses: { '200': { description: List } } }
+    post: { summary: Create a dataset (validates data access at once), responses: { '201': { description: Dataset } } }
+  /api/dw/datasets/suggest:
+    post: { summary: Suggested semantic model for source tables, responses: { '200': { description: Model } } }
+  /api/dw/datasets/{id}:
+    get: { summary: One dataset with its semantic model, responses: { '200': { description: Dataset } } }
+    patch: { summary: Change a dataset (validates data access again), responses: { '200': { description: Dataset } } }
+    delete: { summary: Delete a dataset, responses: { '204': { description: Deleted } } }
+  /api/dw/datasets/{id}/org:
+    get: { summary: Organization columns of the dataset and their validation status, responses: { '200': { description: Status } } }
+  /api/dw/datasets/{id}/org-validation:
+    post: { summary: Validate the Unit Operasional values against the PIMS master (admin/analyst), responses: { '200': { description: Result } } }
+  /api/categories:
+    get: { summary: Kategori → Sub-kategori master, responses: { '200': { description: List } } }
+    post: { summary: Add a category, responses: { '201': { description: Category } } }
+  /api/categories/{id}:
+    patch: { summary: Change a category, responses: { '200': { description: Category } } }
+    delete: { summary: Delete a category, responses: { '204': { description: Deleted } } }
+
+  /api/saved-reports:
+    get:
+      summary: Saved reports (Laporan)
+      responses: { '200': { description: List, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/SavedReport' } } } } } }
+    post:
+      summary: Save the Analysis layout as a report (menu Analisis)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, categoryId, datasetId, layout]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 120 }
+                categoryId: { type: string }
+                datasetId: { type: string }
+                layout: { $ref: '#/components/schemas/SavedLayout' }
+      responses: { '201': { description: Saved }, '400': { $ref: '#/components/responses/Error' } }
+  /api/saved-reports/{id}:
+    patch:
+      summary: Change a report in place (same id); owner or administrator; the dataset cannot be changed
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: { type: string, minLength: 2, maxLength: 120 }
+                categoryId: { type: string }
+                layout: { $ref: '#/components/schemas/SavedLayout' }
+      responses:
+        '200': { description: The changed report, content: { application/json: { schema: { $ref: '#/components/schemas/SavedReport' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Delete a report; owner or administrator
+      responses: { '204': { description: Deleted }, '403': { $ref: '#/components/responses/Error' } }
+
+  /api/users:
+    get: { summary: Users (admin), responses: { '200': { description: List } } }
+    post: { summary: Add a user (admin), responses: { '201': { description: User } } }
+  /api/users/{id}:
+    get: { summary: One user (admin), responses: { '200': { description: User } } }
+    put: { summary: Change a user (admin), responses: { '200': { description: User } } }
+  /api/users/{id}/access:
+    get: { summary: Data access assignments of a user, responses: { '200': { description: Assignments } } }
+    put: { summary: Set the data access assignments of a user, responses: { '200': { description: Assignments } } }
+  /api/org/options:
+    get: { summary: Organization choices from the PIMS master (read-only), responses: { '200': { description: Options } } }
+  /api/org/status:
+    get: { summary: State of the organization snapshot, responses: { '200': { description: Status } } }
+  /api/org/reload:
+    post: { summary: Drop the organization snapshot (read again from PIMS), responses: { '204': { description: Dropped } } }
+  /api/access/menus:
+    get: { summary: Menu permissions per role, responses: { '200': { description: Matrix } } }
+    put: { summary: Change menu permissions, responses: { '200': { description: Matrix } } }
+  /api/access/menus/reset:
+    post: { summary: Back to the default menu permissions, responses: { '200': { description: Matrix } } }
+
+  /api/profile/status:
+    get: { summary: Data Profil availability (hidden in the UI), responses: { '200': { description: Status } } }
+  /api/profile/units:
+    get: { summary: Units of the user's access (Data Profil), responses: { '200': { description: List } } }
+  /api/profile/blocks:
+    get: { summary: Blocks (Data Profil), responses: { '200': { description: List } } }
+  /api/profile/blocks/{id}:
+    get: { summary: One block (Data Profil), responses: { '200': { description: Block } } }
+  /api/profile/blocks/{id}/ops/{tab}:
+    get: { summary: Operations of a block (Data Profil), responses: { '200': { description: Rows } } }
+  /api/profile/vehicles:
+    get: { summary: Vehicles (Data Profil), responses: { '200': { description: List } } }
+  /api/profile/vehicles/groups:
+    get: { summary: Vehicle groups (Data Profil), responses: { '200': { description: List } } }
+  /api/profile/vehicles/{id}:
+    get: { summary: One vehicle (Data Profil), responses: { '200': { description: Vehicle } } }
+  /api/profile/vehicles/{id}/ops:
+    get: { summary: Operations of a vehicle (Data Profil), responses: { '200': { description: Rows } } }
+  /api/profile/vehicles/{id}/card:
+    put: { summary: Vehicle card (Data Profil), responses: { '200': { description: Card } } }
+  /api/profile/vehicles/{id}/costs/{period}:
+    put: { summary: Vehicle costs of a period (Data Profil), responses: { '200': { description: Costs } } }

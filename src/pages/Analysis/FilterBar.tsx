@@ -6,6 +6,7 @@ import { formatDate } from '@/utils/format'
 import { FilterModal, activeFilterCount } from './FilterModal'
 import s from './Analysis.module.css'
 import { tr } from '@/i18n'
+import { activeFields, filterText } from './fieldFilter'
 
 /**
  * The Analysis page's filters work as on saved reports: a vertical "Filter" tab in the left column (with the number
@@ -31,12 +32,12 @@ export function FilterSummary({ dataset, onOpen }: { dataset: Dataset; onOpen: (
   const setFieldFilter = useAnalysisStore((st) => st.setFieldFilter)
   const clearScope = useAnalysisStore((st) => st.clearScope)
   const labelOf = (k: string) => dataset.fields.find((f) => f.id === k)?.label ?? k
-  const fields = Object.entries(filter.fields ?? {}).filter((e): e is [string, string] => !!e[1])
+  const fields = activeFields(filter.fields)
   const lists = Object.keys(scope).filter((k) => scope[k]?.length)
   return (
     <div className={s.fSum} aria-label={tr('Filter aktif')}>
       <FilterIcon size={13} aria-hidden />
-      <span className={s.fSumPeriod}>{formatDate(filter.dateFrom)} – {formatDate(filter.dateTo)}</span>
+      <span className={s.fSumPeriod}>{formatDate(filter.dateFrom)} – {formatDate(filter.dateTo)}{filter.reportDate ? ` · ${tr('tanggal laporan {0}', formatDate(filter.reportDate))}` : ''}</span>
       {lists.map((k) => (
         <span key={`s-${k}`} className="chip chip--live" title={scope[k]!.join(', ')}>
           <span className={s.chipText}>{labelOf(k)}: {scope[k]!.length > 2 ? tr('{0} dipilih', scope[k]!.length) : scope[k]!.join(', ')}</span>
@@ -44,8 +45,8 @@ export function FilterSummary({ dataset, onOpen }: { dataset: Dataset; onOpen: (
         </span>
       ))}
       {fields.map(([k, v]) => (
-        <span key={`f-${k}`} className="chip chip--live" title={v}>
-          <span className={s.chipText}>{labelOf(k)}: {v}</span>
+        <span key={`f-${k}`} className="chip chip--live" title={filterText(v)}>
+          <span className={s.chipText}>{labelOf(k)}: {filterText(v)}</span>
           <button type="button" className="chip-x" onClick={() => setFieldFilter(k, null)} aria-label={tr('Hapus filter {0}', labelOf(k))}><X size={12} aria-hidden /></button>
         </span>
       ))}

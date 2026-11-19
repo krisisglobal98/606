@@ -17,7 +17,7 @@ import { dialectOf } from '../dw/sql.ts'
 import { AppError, badRequest } from '../http/errors.ts'
 import { TIME_DIMENSIONS } from '../datasets/semantic.ts'
 import type { RowScope } from '../dataAccess/guard.ts'
-import { AnalyticsQuerySchema, valueLabel } from './analyticsService.ts'
+import { AnalyticsQuerySchema, fieldFilters, valueLabel } from './analyticsService.ts'
 import { ResultCache, scopeKey, stableKey } from './resultCache.ts'
 import { dimCol, levelOf, SqlBuilder, type DateWindow } from './sqlBuilder.ts'
 
@@ -99,14 +99,18 @@ export class GridService {
     const known = new Set([...d.semantic.dimensions.map((x) => x.id), ...TIME_DIMENSIONS.map((t) => t.id)])
     if (q.dimensions.some((x) => !known.has(x))) throw badRequest('UNKNOWN_DIMENSION', 'Ada dimensi yang tidak dikenal di dataset ini.')
     const L = req.depth
-    if (q.dimensions.length && L >= q.dimensions.length) throw badRequest('INVALID_DEPTH', 'Level hierarki tidak valid.')
-    if (req.path && req.path.length !== L) throw badRequest('INVALID_PATH', 'Path parent tidak sesuai level.')
+    // Messages name the expected shape: depth is the index of the level to return; path holds one parent value per
+    // level above it (values exactly as an earlier response returned them in rows[].path).
+    if (q.dimensions.length && L >= q.dimensions.length)
+      throw badRequest('INVALID_DEPTH', `Level hierarki tidak valid: depth harus 0 sampai ${q.dimensions.length - 1} (indeks di query.dimensions).`)
+    if (req.path && req.path.length !== L)
+      throw badRequest('INVALID_PATH', `Path parent tidak sesuai level: untuk depth ${L} isi path dengan ${L} nilai, satu per level di atasnya, persis seperti rows[].path dari respons sebelumnya (${L ? `mis. path [${q.dimensions.slice(0, L).map((x) => `"<nilai ${x}>"`).join(', ')}]` : 'depth 0: path null'}).`)
     if (req.path?.some((v) => v == null)) throw badRequest('NULL_PATH', 'Baris bernilai kosong tidak dapat dibuka lebih dalam.')
     if (q.filter.dateFrom > q.filter.dateTo) throw badRequest('INVALID_PERIOD', 'Tanggal mulai harus sebelum tanggal akhir.')
 
-    const filters: { dim: string; values: string[] }[] = []
+    const filters: { dim: string; values?: string[]; like?: string }[] = []
     for (const [dim, values] of Object.entries(q.scope)) if (values.length) filters.push({ dim, values })
-    for (const [dim, v] of Object.entries(q.filter.fields ?? {})) if (v) filters.push({ dim, values: [v] })
+    filters.push(...fieldFilters(q.filter.fields))
     for (const f of filters) if (!d.semantic.dimensions.some((x) => x.id === f.dim)) throw badRequest('UNKNOWN_DIMENSION', `Filter "${f.dim}" bukan dimensi dataset ini.`)
     // The parent path is just more filters; values come from a previous response of this endpoint.
     req.path?.forEach((v, i) => filters.push({ dim: q.dimensions[i]!, values: [v as string] }))

@@ -36,7 +36,7 @@ export interface AggregateRequest {
   measures: string[]
   windows: DateWindow[]
   /** User filters: they only narrow (AND), the data access scope below decides what may be seen. */
-  filters: { dim: string; values: string[] }[]
+  filters: { dim: string; values?: string[]; like?: string }[]
   /**
    * Data access scope (dataAccess/guard.ts), REQUIRED: applied to the rows of every source where they are read
    * (src_r), before snapshot, grouping sets, period windows and the FULL JOIN of the sources.
@@ -142,7 +142,7 @@ export class SqlBuilder {
     const sources = aliases.map((a) => this.source(a))
     const multi = r.windows.length > 1
     const winParams = r.windows.map((w) => ({ id: w.id, from: p.add(w.from, 'date'), to: p.add(w.to, 'date') }))
-    const filterParams = r.filters.map((f) => ({ dim: f.dim, ph: p.add(f.values, 'text[]') }))
+    const filterParams = r.filters.map((f) => (f.like != null ? { dim: f.dim, like: true, ph: p.add(D.containsValue(f.like), 'text') } : { dim: f.dim, like: false, ph: p.add(f.values ?? [], 'text[]') }))
     const n = r.dims.length
 
     const ctes: string[] = []
@@ -170,7 +170,7 @@ export class SqlBuilder {
       for (const f of filterParams) {
         const e = this.filterExpr(s, f.dim)
         if (e == null) throw new AppError(400, 'DIMENSION_NOT_AVAILABLE', `Filter ${this.dimLabel(f.dim)} tidak dapat diterapkan pada sumber ${s.label} karena kolomnya tidak dipetakan.`)
-        where.push(D.inList(e, f.ph))
+        where.push(f.like ? D.contains(e, f.ph) : D.inList(e, f.ph))
       }
       // Data access scope of this source's rows (before every aggregation and the FULL JOIN below).
       const sc = this.scopeCondition(r.scope, s, p)

@@ -5,6 +5,7 @@
  * new data route cannot appear without being reviewed for the data access guard.
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 import Fastify from 'fastify'
 import type { User } from '../src/auth/authService.ts'
@@ -158,7 +159,7 @@ describe('route inventory', () => {
     'GET /api/categories', 'POST /api/categories', 'PATCH /api/categories/:id', 'DELETE /api/categories/:id',
     'GET /api/dw/datasets', 'GET /api/dw/datasets/:id', 'POST /api/dw/datasets/suggest', 'POST /api/dw/datasets', 'PATCH /api/dw/datasets/:id', 'DELETE /api/dw/datasets/:id',
     'GET /api/dw/datasets/:id/org', 'POST /api/dw/datasets/:id/org-validation', 'GET /api/dw/query-log',
-    'GET /api/saved-reports', 'POST /api/saved-reports', 'DELETE /api/saved-reports/:id',
+    'GET /api/saved-reports', 'POST /api/saved-reports', 'PATCH /api/saved-reports/:id', 'DELETE /api/saved-reports/:id',
     'GET /api/users', 'GET /api/users/:id', 'POST /api/users', 'PUT /api/users/:id', 'GET /api/users/:id/access', 'PUT /api/users/:id/access',
     'GET /api/org/options', 'GET /api/org/status', 'POST /api/org/reload', 'GET /api/profile/status', 'GET /api/profile/vehicles/groups',
     'GET /api/access/menus', 'PUT /api/access/menus', 'POST /api/access/menus/reset',
@@ -176,6 +177,17 @@ describe('route inventory', () => {
     const known = new Set([...GUARDED, ...NO_REPORT_DATA])
     assert.deepEqual(seen.filter((x) => !known.has(x)).sort(), [], 'unclassified routes')
     assert.deepEqual([...known].filter((x) => !seen.includes(x)).sort(), [], 'classified routes that no longer exist')
+    // Every route is documented in docs/openapi.yaml (path with {param}, and its method under that path).
+    const doc = readFileSync(new URL('../../docs/openapi.yaml', import.meta.url), 'utf8')
+    const undocumented = seen.filter((x) => {
+      const [m, url] = x.split(' ') as [string, string]
+      const at = doc.indexOf(`\n  ${url.replace(/:(\w+)/g, '{$1}')}:\n`)
+      if (at < 0) return true
+      const next = doc.slice(at + 1).search(/\n {2}\/api/)
+      const block = next < 0 ? doc.slice(at + 1) : doc.slice(at + 1, at + 1 + next)
+      return !new RegExp(`\\n {4}${m.toLowerCase()}:`).test(block)
+    })
+    assert.deepEqual(undocumented.sort(), [], 'routes missing from docs/openapi.yaml')
     await app.close()
   })
 })

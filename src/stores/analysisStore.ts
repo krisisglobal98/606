@@ -8,8 +8,9 @@ import type { ChartType, DataScope, Dataset, FieldKind, Filter } from '@/types/c
 import type { MeasureSetting } from '@/semantic/measureEngine'
 import { addGroup, flatten, fromMeasures, moveBlock, placeMeasure, removeGroup, removeMeasure, renameGroup, type MeasureBlock } from './measureLayout'
 import { useUiStore } from './uiStore'
-import type { SavedLayout } from '@/types/report'
+import type { SavedLayout, SavedReport } from '@/types/report'
 import { isMonthToDate, monthToDate } from './period'
+import type { FieldFilterValue } from '@/pages/Analysis/fieldFilter'
 
 export type Zone = 'dimensions' | 'measures'
 export const zoneFor = (kind: FieldKind): Zone => (kind === 'dimension' ? 'dimensions' : 'measures')
@@ -91,11 +92,22 @@ interface AnalysisState {
   collapseAll: () => void
   setTableFocus: (on: boolean) => void
   setDataset: (ds: Dataset) => void
+  /**
+   * The saved report being changed (Laporan → Ubah di Analisis): Simpan Laporan then offers to save the changes to it
+   * (same id). Cleared when another dataset is chosen.
+   */
+  editing: { id: string; name: string; categoryId: string | null; datasetId: string } | null
+  /** Loads a saved report's layout into the workspace for changing it (period month to date, report date automatic). */
+  openReport: (ds: Dataset, r: SavedReport) => void
+  /** Set by openReport: the Analysis page opens the workspace at once (no start view); read once. */
+  startNow: boolean
+  takeStartNow: () => boolean
+  stopEditing: () => void
   clearScope: (key: string) => void
   /** The filter modal's Terapkan: period, single-value filters and multi-value lists at once (one query). */
   applyFilters: (filter: Filter, scope: DataScope) => void
   /** Single-value dimension filter (warehouse datasets' filter bar). */
-  setFieldFilter: (dim: string, value: string | null) => void
+  setFieldFilter: (dim: string, value: FieldFilterValue) => void
   /** Adds or moves a field into a zone at `index` (end when omitted). */
   placeField: (fieldId: string, zone: Zone, index?: number) => void
   removeField: (fieldId: string) => void
@@ -147,6 +159,33 @@ export const useAnalysisStore = create<AnalysisState>()(
       collapseAll: () => set({ collapsed: ALL_COLLAPSED }),
       setTableFocus: (tableFocus) => set({ tableFocus }),
 
+      editing: null,
+      startNow: false,
+      takeStartNow: () => {
+        const v = get().startNow
+        if (v) set({ startNow: false })
+        return v
+      },
+      stopEditing: () => set({ editing: null }),
+      openReport: (ds, r) => {
+        const l = r.layout
+        const measureLayout = (l.measureLayout ?? []) as MeasureBlock[]
+        set({
+          datasetId: ds.id,
+          scope: (l.scope ?? {}) as DataScope,
+          filter: { ...defaultFilter(), ...(l.filter as Partial<Filter>), ...monthToDate(), reportDate: null },
+          autoPeriod: true,
+          dimensions: [...(l.dimensions ?? [])],
+          measureLayout,
+          measures: flatten(measureLayout),
+          measureSettings: (l.measureSettings ?? {}) as Record<string, MeasureSetting>,
+          chartType: (l.chartType as ChartType) || get().chartType,
+          chartBy: l.chartBy || 'trend',
+          table: { ...get().table, ...(l.table as Partial<TableOptions>) },
+          editing: { id: r.id, name: r.name, categoryId: r.categoryId, datasetId: ds.id },
+          startNow: true,
+        })
+      },
       setDataset: (ds) => {
         // Start from the dataset's own raw measures only: derived/calculated ones are added by the user.
         const raw = [...new Set(ds.defaultLayout.measures)].filter((id) => ds.fields.some((f) => f.id === id && f.kind === 'measure' && f.calc?.kind !== 'ratio'))
@@ -162,6 +201,7 @@ export const useAnalysisStore = create<AnalysisState>()(
           scope: {},
           filter: { ...defaultFilter(), fields: {} },
           autoPeriod: true,
+          editing: null,
         })
       },
       clearScope: (key) => set({ scope: { ...get().scope, [key]: [] } }),

@@ -48,7 +48,7 @@ describe('DOD API on a temporary database', { skip }, () => {
   let dir: string
   let created = false
   let t = 1_000_000
-  const json = async (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, opts: { token?: string; body?: unknown; ip?: string } = {}) => {
+  const json = async (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, opts: { token?: string; body?: unknown; ip?: string } = {}) => {
     const r = await app.inject({ method, url, payload: opts.body as object | undefined, remoteAddress: opts.ip ?? '10.0.0.1', headers: opts.token ? { authorization: `Bearer ${opts.token}` } : {} })
     return { status: r.statusCode, headers: r.headers, type: String(r.headers['content-type'] ?? ''), body: r.body ? JSON.parse(r.body) : null }
   }
@@ -94,8 +94,12 @@ describe('DOD API on a temporary database', { skip }, () => {
     const have = new Set(r.rows.map((x) => x.t))
     // Every table a migration creates exists (read from the migration files, so a new migration needs no edit here).
     const dir = new URL('../src/db/migrations/', import.meta.url)
-    const want = readdirSync(dir).filter((f) => f.endsWith('.sql')).flatMap((f) => [...readFileSync(new URL(f, dir), 'utf8').matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map((m) => m[1]!))
-    assert.ok(want.length >= 30)
+    const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).map((f) => readFileSync(new URL(f, dir), 'utf8'))
+    // Tables a later migration removes (020: the Laporan PDF module, in a FOREACH ... ARRAY[...] DROP loop).
+    const dropped = new Set(files.filter((sql) => /DROP TABLE/.test(sql)).flatMap((sql) => [...sql.matchAll(/ARRAY\[([^\]]+)\]/g)].flatMap((m) => [...m[1]!.matchAll(/'(\w+)'/g)].map((x) => x[1]!))))
+    const want = files.flatMap((sql) => [...sql.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map((m) => m[1]!)).filter((t) => !dropped.has(t))
+    assert.ok(want.length >= 20, `only ${want.length} tables found in the migrations`)
+    for (const t of dropped) assert.ok(!have.has(t), `${t} is removed by a later migration`)
     assert.deepEqual(want.filter((w) => !have.has(w)), [])
     for (const t of ['dor_vehicle_card', 'dor_vehicle_cost', 'dor_block_budget']) assert.ok(have.has(t), t)
     // Tables of the removed modules are not created (Laporan Excel, curah hujan: dropped by 016; Publish: 017).
@@ -166,7 +170,23 @@ describe('DOD API on a temporary database', { skip }, () => {
     const inMaster = (await json('GET', '/api/categories', { token: admin })).body.find((c: { id: string }) => c.id === cat.id)
     assert.equal(inMaster.datasetCount, 0, 'a saved report is not a dataset of the category')
 
+    // PATCH keeps the id; only the owner or an administrator; nothing else (dataset, owner) can be changed.
+    const id = saved.body.id
+    const renamed = await json('PATCH', `/api/saved-reports/${id}`, { token: viewer, body: { name: 'Produksi per Kebun (v2)', layout: { ...layout, dimensions: ['kebun', 'afdeling'] } } })
+    assert.equal(renamed.status, 200, JSON.stringify(renamed.body))
+    assert.deepEqual([renamed.body.id, renamed.body.name, renamed.body.layout.dimensions, renamed.body.datasetId], [id, 'Produksi per Kebun (v2)', ['kebun', 'afdeling'], 'd-saved'])
+    assert.ok(renamed.body.updatedAt >= saved.body.updatedAt)
+    assert.equal((await json('PATCH', `/api/saved-reports/${id}`, { token: viewer, body: {} })).status, 400, 'nothing to change')
+    assert.equal((await json('PATCH', `/api/saved-reports/${id}`, { token: viewer, body: { datasetId: 'd-other' } })).status, 400, 'the dataset is not changeable')
+    assert.equal((await json('PATCH', `/api/saved-reports/${id}`, { token: viewer, body: { categoryId: 'cat-none' } })).status, 400)
+    assert.equal((await json('PATCH', '/api/saved-reports/srp-tidak-ada', { token: viewer, body: { name: 'xx' } })).status, 404)
+    assert.equal((await json('PATCH', `/api/saved-reports/${id}`, { body: { name: 'xx' } })).status, 401)
+    const audit = await k.db.query<{ n: number }>("SELECT count(*)::int AS n FROM dor_audit WHERE action = 'saved-report.update' AND target = $1", [id])
+    assert.equal(audit.rows[0]?.n, 1)
+
     const other = (await json('POST', '/api/saved-reports', { token: admin, body })).body
+    assert.equal((await json('PATCH', `/api/saved-reports/${other.id}`, { token: viewer, body: { name: 'bukan milik saya' } })).status, 403)
+    assert.equal((await json('PATCH', `/api/saved-reports/${id}`, { token: admin, body: { name: 'Produksi per Kebun' } })).status, 200, 'an administrator may change any report')
     assert.equal((await json('DELETE', `/api/saved-reports/${other.id}`, { token: viewer })).status, 403)
     assert.equal((await json('DELETE', `/api/saved-reports/${other.id}`, { token: admin })).status, 204)
 

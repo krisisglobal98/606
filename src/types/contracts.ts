@@ -125,7 +125,7 @@ export const FilterSchema = z.object({
   /** Report date (tanggal laporan) of the H.I / S.D.H.I / YTD columns; null or absent = min(dateTo, today). */
   reportDate: z.string().nullable().optional(),
   /** Warehouse datasets: single-value filters by dimension id (filter bar). */
-  fields: z.record(z.string(), z.string().nullable()).optional(),
+  fields: z.record(z.string(), z.union([z.string(), z.array(z.string()), z.object({ like: z.string() })]).nullable()).optional(),
 })
 export type Filter = z.infer<typeof FilterSchema>
 

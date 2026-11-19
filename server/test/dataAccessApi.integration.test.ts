@@ -234,6 +234,30 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
     assert.equal((await g({ filter: { dateFrom: '2026-01-01', dateTo: '2026-01-31', reportDate: '2026-02-30' } }, ['hi'])).status, 400, 'an impossible date is refused')
   })
 
+  test('value filters: a list (any of), "contains" (case-insensitive, wildcards literal); never wider than the scope', async () => {
+    const total = async (t: string, fields: Record<string, unknown>) => {
+      const r = await call('POST', '/api/dw/analytics/grid', t, { query: Q('ds-ok', { measures: ['produksi'], filter: { dateFrom: '2026-01-01', dateTo: '2026-12-31', fields } }), depth: 0, path: null, withTotal: true })
+      assert.equal(r.status, 200, JSON.stringify(r.body))
+      return r.body.total.cur.produksi
+    }
+    assert.equal(await total('frg', { afdeling: ['01', '02'] }), 270)
+    assert.equal(await total('frg', { afdeling: ['02'] }), 20)
+    assert.equal(await total('frg', { afdeling: [] }), 270, 'an empty list is no filter')
+    assert.equal(await total('frg', { bisnis_unit: { like: 'sam' } }), 140, 'SAM-1 + SAM-2, lower case matches')
+    assert.equal(await total('frg', { bisnis_unit: { like: '-1' } }), 160, 'SAM-1 (10 + 20) + CLP-1 (40 + 90)')
+    assert.equal(await total('frg', { bisnis_unit: { like: '%' } }), null, '% is a character, not a wildcard')
+    assert.equal(await total('frg', { bisnis_unit: { like: '_' } }), null, '_ is a character, not a wildcard')
+    assert.equal(await total('sam1', { bisnis_unit: { like: 'CLP' } }), null, 'a filter never reaches rows outside the scope')
+    assert.equal(await total('sam1', { bisnis_unit: ['SAM-1', 'CLP-1', 'BHP-1'] }), 30, 'other units in the list stay hidden')
+    for (const bad of [{ like: '' }, { like: 'x'.repeat(101) }, { contains: 'x' }, Array(501).fill('x')]) {
+      const r = await call('POST', '/api/dw/analytics/grid', 'frg', { query: Q('ds-ok', { filter: { dateFrom: '2026-01-01', dateTo: '2026-12-31', fields: { bisnis_unit: bad } } }), depth: 0, path: null, withTotal: true })
+      assert.equal(r.status, 400, JSON.stringify(bad).slice(0, 40))
+    }
+    // The summary query (KPI) applies the same filters.
+    const q = await query('frg', 'ds-ok', { filter: { dateFrom: '2026-01-01', dateTo: '2026-12-31', fields: { bisnis_unit: { like: 'sam' } } } })
+    assert.equal(q.body.grandTotal.produksi, 140)
+  })
+
   test('distinct values and search: only values inside the scope; cache never crosses scopes', async () => {
     const v = async (t: string, q = '') => (await call('GET', `/api/dw/datasets/ds-ok/values?field=bisnis_unit${q ? `&q=${q}` : ''}`, t)).body.values
     assert.deepEqual(await v('frg'), ['CLP-1', 'SAM-1', 'SAM-2'])

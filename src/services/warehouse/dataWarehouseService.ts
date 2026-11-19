@@ -17,7 +17,8 @@ export const dataWarehouseService = {
   getSchemas: (id: string, signal?: AbortSignal, fresh = false) => requestJson<DwSchema[]>(`/dw/connections/${e(id)}/schemas`, { signal, query: fresh ? { fresh: '1' } : undefined }),
   getTables: (id: string, schema: string, signal?: AbortSignal, fresh = false) =>
     requestJson<DwTable[]>(`/dw/connections/${e(id)}/schemas/${e(schema)}/tables`, { signal, query: fresh ? { fresh: '1' } : undefined }),
-  getTableColumns: (id: string, schema: string, name: string, signal?: AbortSignal) => requestJson<DwColumn[]>(`${table(id, schema, name)}/columns`, { signal }),
+  /** fresh: read the structure from the source now (a column just added), not the 60-second cache. */
+  getTableColumns: (id: string, schema: string, name: string, signal?: AbortSignal, fresh = false) => requestJson<DwColumn[]>(`${table(id, schema, name)}/columns`, { signal, query: fresh ? { fresh: '1' } : undefined }),
 
   suggestDataset: (body: { connectionId: string; schema: string; tables: string[] }, signal?: AbortSignal) =>
     requestJson<DatasetSuggestion>('/dw/datasets/suggest', { method: 'POST', body, signal }),

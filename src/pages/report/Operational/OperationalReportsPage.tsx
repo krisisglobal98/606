@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, FileText, Filter as FilterIcon, Folder, PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router'
+import { BarChart3, ChevronDown, ChevronRight, FileText, Filter as FilterIcon, Folder, PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { canOpen } from '@/app/auth/menus'
+import type { CalcMeasure } from '@/semantic/measureEngine'
+import { useAnalysisStore } from '@/stores/analysisStore'
+import { useGridPrefs } from '@/stores/gridPrefsStore'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { EdgeTab } from '@/components/common/EdgeTab'
@@ -18,6 +23,7 @@ import type { DataScope, Filter } from '@/types/contracts'
 import type { SavedReport } from '@/types/report'
 import { formatDate, formatDateTime } from '@/utils/format'
 import { FilterModal, activeFilterCount, normalized } from '@/pages/Analysis/FilterModal'
+import { activeFields, filterText } from '@/pages/Analysis/fieldFilter'
 import { SavedReportGrid } from './SavedReportGrid'
 import { monthToDate } from '@/stores/period'
 import { NONE, reportTree } from './operationalMeta'
@@ -49,6 +55,7 @@ function usePanel(key: string): [boolean, (v: boolean) => void] {
 /** Report → Laporan Operasional: saved Analysis layouts listed by master category; choosing one shows its Tabel Hasil. */
 export default function OperationalReportsPage() {
   const user = useAuthStore((st) => st.user)
+  const navigate = useNavigate()
   const [nonce, setNonce] = useState(0)
   const data = useResource(async (signal) => {
     const [reports, categories, catalog] = await Promise.all([savedReportService.list(signal), dataWarehouseService.getCategories(signal), datasetService.getCatalog()])
@@ -112,6 +119,23 @@ export default function OperationalReportsPage() {
   const flip = (id: string, list: SavedReport[]) => setToggled((t) => ({ ...t, [id]: !isOpen(id, list) }))
   // The creator of a report or an administrator may delete it (the API refuses everyone else).
   const canDelete = (r: SavedReport) => user?.role === 'admin' || r.createdBy === user?.id
+  // Changing a report's layout happens in Analisis (same id on save): its owner or an administrator with that menu.
+  const canEdit = (r: SavedReport) => canDelete(r) && canOpen(user, 'analisis')
+  const editInAnalysis = () => {
+    if (!current || !dataset) return
+    // Calculated measures live in the browser; the report carries the ones its layout uses.
+    for (const m of (current.layout.calc ?? []) as CalcMeasure[]) useGridPrefs.getState().saveCalc(dataset.id, m)
+    useAnalysisStore.getState().openReport(dataset, current)
+    navigate('/analisis')
+  }
+  // Report parameters shown in the header, like the input cells of the Excel report: report date and active filters.
+  const labelOf = (id: string) => dataset?.fields.find((f) => f.id === id)?.label ?? id
+  const params = active
+    ? [
+        ...Object.entries(active.scope).filter(([, v]) => v?.length).map(([k, v]) => `${labelOf(k)}: ${v.join(', ')}`),
+        ...activeFields(active.filter.fields).map(([k, v]) => `${labelOf(k)}: ${filterText(v)}`),
+      ]
+    : []
   const reportBtn = (r: SavedReport) => (
     <li key={r.id} className={s.reportRow}>
       <button type="button" className={`${s.report}${r.id === current?.id ? ` ${s.reportOn}` : ''}`} aria-current={r.id === current?.id ? 'page' : undefined} onClick={() => setChosen(r.id)} title={r.name}>
@@ -205,14 +229,25 @@ export default function OperationalReportsPage() {
                       <FilterIcon size={13} aria-hidden />
                       <span>
                         {formatDate(active.filter.dateFrom)} – {formatDate(active.filter.dateTo)}
+                        {' · '}{tr('tanggal laporan {0}', active.filter.reportDate ? formatDate(active.filter.reportDate) : tr('otomatis'))}
                         {filterCount > 0 && ` · ${tr('{0} filter aktif', filterCount)}`}
                         {changed && ` · ${tr('diubah dari filter laporan')}`}
                       </span>
                       <button type="button" className={s.link} onClick={() => setFilterOpen(true)}>{tr('Ubah filter')}</button>
                     </p>
                   )}
+                  {params.length > 0 && (
+                    <p className="t-meta" aria-label={tr('Parameter laporan')}>
+                      {tr('Parameter:')}{' '}{params.join(' · ')}
+                    </p>
+                  )}
                 </div>
                 <div className={s.headActions}>
+                  {canEdit(current) && dataset && (
+                    <Button size="sm" icon={<BarChart3 size={14} aria-hidden />} onClick={editInAnalysis} title={tr('Buka layout laporan ini di Analisis; Simpan Laporan menyimpan perubahan ke laporan yang sama')}>
+                      {tr('Ubah di Analisis')}
+                    </Button>
+                  )}
                   {canDelete(current) && (
                     <Button size="sm" icon={<Trash2 size={14} aria-hidden />} onClick={() => setDeleting(current)} aria-label={tr('Hapus laporan {0}', current.name)}>
                       {tr('Hapus')}

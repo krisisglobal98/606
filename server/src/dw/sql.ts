@@ -58,6 +58,9 @@ export interface SqlDialect {
   inList(expr: string, arrayParam: string): string
   /** Aggregate, optionally restricted to rows matching `cond` (NULL when no row matched, except COUNT). */
   agg(fn: 'SUM' | 'MAX' | 'COUNT', expr: string | null, cond?: string | null): string
+  /** expr contains the text of `param` (case-insensitive); the param holds containsValue(text). */
+  contains(expr: string, param: string): string
+  containsValue(text: string): string
   /** Value of `expr` on the row with the largest `order` (among rows matching `cond`); NULL when none matched. */
   lastBy(expr: string, order: string, cond?: string | null): string
   /** A one-character string that never occurs in dimension values (NULL-safe join key). */
@@ -77,6 +80,9 @@ const postgres: SqlDialect = {
   day: (e) => `to_char(${e}, 'YYYY-MM-DD')`,
   inList: (e, p) => `${e} = ANY(${p})`,
   agg: (fn, e, cond) => `${fn}(${e ?? '*'})${cond ? ` FILTER (WHERE ${cond})` : ''}`,
+  // ILIKE with the wildcards of the text escaped: "10%" means the characters 1, 0, %.
+  contains: (e, p) => `${e} ILIKE ${p}`,
+  containsValue: (t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
   lastBy: (e, o, cond) => `(array_agg(${e} ORDER BY ${o} DESC)${cond ? ` FILTER (WHERE ${cond})` : ''})[1]`,
   sentinel: 'chr(1)',
 }
@@ -93,6 +99,8 @@ const clickhouse: SqlDialect = {
   inList: (e, p) => `has(${p}, ${e})`,
   // -IfOrNull keeps PostgreSQL's "NULL when nothing matched" semantics of SUM/MAX ... FILTER.
   agg: (fn, e, cond) => (cond ? (fn === 'COUNT' ? `countIf(${cond})` : `${fn.toLowerCase()}IfOrNull(${e}, ${cond})`) : `${fn}(${e ?? '*'})`),
+  contains: (e, p) => `positionCaseInsensitiveUTF8(${e}, ${p}) > 0`,
+  containsValue: (t) => t,
   lastBy: (e, o, cond) => (cond ? `argMaxIfOrNull(${e}, ${o}, ${cond})` : `argMaxOrNull(${e}, ${o})`),
   sentinel: 'char(1)',
 }

@@ -31,6 +31,16 @@ export const CreateSavedReportSchema = z.object({
   layout: SavedLayoutSchema,
 })
 
+/** Changes to a saved report; its id, dataset and owner stay (links to the report keep working). */
+export const UpdateSavedReportSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Nama laporan minimal 2 karakter').max(120).optional(),
+    categoryId: z.string().min(1, 'Pilih kategori laporan.').optional(),
+    layout: SavedLayoutSchema.optional(),
+  })
+  .strict()
+  .refine((x) => x.name !== undefined || x.categoryId !== undefined || x.layout !== undefined, 'Tidak ada yang diubah.')
+
 export interface SavedReport {
   id: string
   name: string
@@ -95,6 +105,25 @@ export class SavedReportService {
     const id = `srp-${randomBytes(6).toString('hex')}`
     await this.db.query('INSERT INTO dor_saved_report (id, name, category_id, dataset_id, layout, created_by) VALUES ($1,$2,$3,$4,$5,$6)', [id, input.name, input.categoryId, input.datasetId, JSON.stringify(input.layout), userId])
     await this.audit(userId, 'saved-report.create', id, { name: input.name, categoryId: input.categoryId, datasetId: input.datasetId })
+    return toSaved((await this.db.query<Row>(`${SELECT} WHERE r.id = $1`, [id])).rows[0]!)
+  }
+
+  /** The owner or an administrator; the id stays, so links and bookmarks to the report keep working. */
+  async update(id: string, input: z.infer<typeof UpdateSavedReportSchema>, user: Pick<User, 'id' | 'role'>): Promise<SavedReport> {
+    const r = (await this.db.query<Row>('SELECT id, name, created_by FROM dor_saved_report WHERE id = $1', [id])).rows[0]
+    if (!r) throw notFound('Laporan tidak ditemukan.')
+    if (user.role !== 'admin' && r.created_by !== user.id) throw forbidden('Hanya pembuat laporan atau administrator yang dapat mengubahnya.')
+    if (input.layout && JSON.stringify(input.layout).length > MAX_LAYOUT_BYTES) throw badRequest('LAYOUT_TOO_LARGE', 'Layout terlalu besar untuk disimpan.')
+    if (input.categoryId) await this.categories.assertExists(input.categoryId)
+    const sets: string[] = []
+    const values: unknown[] = []
+    const put = (col: string, v: unknown) => (values.push(v), sets.push(`${col} = $${values.length}`))
+    if (input.name !== undefined) put('name', input.name)
+    if (input.categoryId !== undefined) put('category_id', input.categoryId)
+    if (input.layout !== undefined) put('layout', JSON.stringify(input.layout))
+    values.push(id)
+    await this.db.query(`UPDATE dor_saved_report SET ${sets.join(', ')}, updated_at = now() WHERE id = $${values.length}`, values)
+    await this.audit(user.id, 'saved-report.update', id, { name: input.name ?? r.name, fields: Object.keys(input) })
     return toSaved((await this.db.query<Row>(`${SELECT} WHERE r.id = $1`, [id])).rows[0]!)
   }
 

@@ -1326,4 +1326,22 @@ export const en: Record<string, string> = {
   "Akumulasi tanggal 1 bulan tanggal laporan s.d. tanggal laporan": "Total from the 1st of the report month up to the report date",
   "S.D. Tahun Ini": "Year to date",
   "Akumulasi 1 Januari s.d. tanggal laporan": "Total from 1 January up to the report date",
+  // Report edit (PATCH) and report parameters, 2026-11-19
+  "Mengubah laporan \"{0}\"": "Changing report \"{0}\"",
+  "Perubahan disimpan ke laporan \"{0}\".": "Changes saved to report \"{0}\".",
+  "Simpan sebagai": "Save as",
+  "Perubahan pada laporan \"{0}\"": "Changes to report \"{0}\"",
+  "Laporan baru": "New report",
+  "tanggal laporan {0}": "report date {0}",
+  "otomatis": "automatic",
+  "Parameter laporan": "Report parameters",
+  "Parameter:": "Parameters:",
+  "Buka layout laporan ini di Analisis; Simpan Laporan menyimpan perubahan ke laporan yang sama": "Open this report's layout in Analysis; Save Report saves the changes to the same report",
+  "Ubah di Analisis": "Change in Analysis",
+  // Value filters (list / contains) and column reload, 2026-11-19
+  "berisi \"{0}\"": "contains \"{0}\"",
+  "atau berisi teks…": "or contains text…",
+  "{0} berisi teks": "{0} contains text",
+  "Baca ulang kolom tabel sumber, mis. setelah tim data menambah kolom": "Read the source table's columns again, e.g. after the data team added a column",
+  "Muat ulang kolom": "Reload columns",
 }

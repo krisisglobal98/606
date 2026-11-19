@@ -4,6 +4,7 @@ import { MultiSelect } from '@/components/forms/MultiSelect'
 import { SearchableSelect } from '@/components/forms/SearchableSelect'
 import type { DataScope, Dataset, Filter } from '@/types/contracts'
 import { useFieldValues } from './useFieldValues'
+import { activeFields, filterText, isActiveFilter, type FieldFilterValue } from './fieldFilter'
 import s from './Analysis.module.css'
 import { tr } from '@/i18n'
 
@@ -14,7 +15,7 @@ interface Props {
   onDates: (from: string, to: string) => void
   /** Tanggal laporan of the H.I / S.D.H.I / YTD columns; null = automatic (end of the period, at most today). */
   onReportDate?: (date: string | null) => void
-  onField: (field: string, value: string | null) => void
+  onField: (field: string, value: FieldFilterValue) => void
   onClearScope: (field: string) => void
   /** Multi-value fields (value lists that limit the data). */
   scopeFields?: string[]
@@ -39,16 +40,16 @@ export function FilterControls({ dataset, filter, scope, onDates, onReportDate, 
     if (next.from && next.to && next.from <= next.to) onDates(next.from, next.to)
   }
   const activeScope = Object.keys(scope).filter((k) => scope[k]?.length)
-  const activeFields = Object.entries(filter.fields ?? {}).filter((e): e is [string, string] => !!e[1])
-  const count = activeScope.length + activeFields.length
+  const active = activeFields(filter.fields)
+  const count = activeScope.length + active.length
 
   const lists = scopeFields.map((f) => (
     <ScopeSelect key={f} dataset={dataset} field={f} label={labelOf(f)} value={scope[f] ?? []} onToggle={(v) => onToggleScope?.(f, v)} onClear={() => onClearScope(f)} />
   ))
   // A field offered both ways is shown once, as the list (it also covers one value); a single value already set on it
   // (e.g. saved in a report) keeps its control so it can still be seen and changed.
-  const singles = (dataset.filterFields ?? []).filter((f) => !scopeFields.includes(f) || !!filter.fields?.[f]).map((f) => (
-    <FieldFilter key={f} dataset={dataset} field={f} label={labelOf(f)} value={filter.fields?.[f] ?? ''} onChange={(v) => onField(f, v)} />
+  const singles = (dataset.filterFields ?? []).filter((f) => !scopeFields.includes(f) || isActiveFilter(filter.fields?.[f])).map((f) => (
+    <FieldFilter key={f} dataset={dataset} field={f} label={labelOf(f)} value={filter.fields?.[f] ?? null} onChange={(v) => onField(f, v)} />
   ))
   // Titled sections, so a field that is offered both ways is not confusing.
   const section = (title: string, hint: string, children: ReactNode) => (
@@ -112,9 +113,9 @@ export function FilterControls({ dataset, filter, scope, onDates, onReportDate, 
             </button>
           </span>
         ))}
-        {activeFields.map(([k, v]) => (
-          <span key={`f-${k}`} className="chip chip--live" title={v}>
-            <span className={s.chipText}>{labelOf(k)}: {v}</span>
+        {active.map(([k, v]) => (
+          <span key={`f-${k}`} className="chip chip--live" title={filterText(v)}>
+            <span className={s.chipText}>{labelOf(k)}: {filterText(v)}</span>
             <button type="button" className="chip-x" onClick={() => onField(k, null)} aria-label={tr('Hapus filter {0}', labelOf(k))}>
               <X size={12} aria-hidden />
             </button>
@@ -126,23 +127,39 @@ export function FilterControls({ dataset, filter, scope, onDates, onReportDate, 
   )
 }
 
-/** Single-value filter: a searchable dropdown; the first entry means every value. */
-function FieldFilter({ dataset, field, label, value, onChange }: { dataset: Dataset; field: string; label: string; value: string; onChange: (v: string | null) => void }) {
+/**
+ * Value filter: a searchable dropdown (one value; the first entry means every value) or, instead, "contains" text
+ * (e.g. every unit code with "DT-0"). A list kept from a saved report shows as its values.
+ */
+function FieldFilter({ dataset, field, label, value, onChange }: { dataset: Dataset; field: string; label: string; value: FieldFilterValue; onChange: (v: FieldFilterValue) => void }) {
   const vals = useFieldValues(dataset.id, field)
   const list = vals.data?.values ?? []
   const all = tr('Semua {0}', label.toLowerCase())
+  const like = value && typeof value === 'object' && !Array.isArray(value) ? value.like : ''
+  const one = typeof value === 'string' ? value : Array.isArray(value) && value.length === 1 ? value[0]! : ''
   return (
+    <div className={s.fbCtl}>
     <SearchableSelect
-      className={s.fbCtl}
       label={label}
-      value={value}
-      active={!!value}
+      value={one}
+      active={!!one || (Array.isArray(value) && value.length > 1)}
       disabled={!vals.data}
       onChange={(v) => onChange(v || null)}
       placeholder={vals.status === 'error' ? tr('Nilai tidak dapat dimuat') : vals.data ? all : tr('Memuat…')}
       searchPlaceholder={tr('Cari {0}…', label.toLowerCase())}
-      options={[{ value: '', label: all }, ...list.map((v) => ({ value: v, label: v }))]}
+      options={[{ value: '', label: Array.isArray(value) && value.length > 1 ? filterText(value) : all }, ...list.map((v) => ({ value: v, label: v }))]}
     />
+    <input
+      type="search"
+      className="input"
+      style={{ marginTop: 4, height: 30 }}
+      value={like}
+      maxLength={100}
+      placeholder={tr('atau berisi teks…')}
+      aria-label={tr('{0} berisi teks', label)}
+      onChange={(e) => onChange(e.target.value.trim() ? { like: e.target.value } : null)}
+    />
+    </div>
   )
 }
 

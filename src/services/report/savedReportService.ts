@@ -5,5 +5,7 @@ import { tr } from '@/i18n'
 export const savedReportService = {
   list: (signal?: AbortSignal) => requestJson<SavedReport[]>('/saved-reports', { signal }),
   create: (body: { name: string; categoryId: string; datasetId: string; layout: SavedLayout }) => requestJson<SavedReport>('/saved-reports', { method: 'POST', body, loadingLabel: tr('Menyimpan laporan…') }),
+  /** Changes a report in place (same id): the owner or an administrator. */
+  update: (id: string, body: { name?: string; categoryId?: string; layout?: SavedLayout }) => requestJson<SavedReport>(`/saved-reports/${encodeURIComponent(id)}`, { method: 'PATCH', body, loadingLabel: tr('Menyimpan laporan…') }),
   remove: (id: string) => requestJson<void>(`/saved-reports/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }

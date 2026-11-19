@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, BarChart3, Pencil, Save, Trash2, X } from 'lucide-react'
+import { ArrowLeft, BarChart3, Pencil, RotateCw, Save, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { ErrorState, Skeleton } from '@/components/common/StateView'
@@ -42,7 +42,8 @@ function Detail({ d, onSaved }: { d: WhDataset; onSaved: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const meta = useResource(
-    async (signal) => Promise.all(d.sourceTables.map((t) => dataWarehouseService.getTableColumns(d.connectionId, d.schema, t, signal).then((columns): TableColumns => ({ name: t, columns })))),
+    // Editing reads the columns fresh from the source: a column the data team just added shows up at once.
+    async (signal) => Promise.all(d.sourceTables.map((t) => dataWarehouseService.getTableColumns(d.connectionId, d.schema, t, signal, true).then((columns): TableColumns => ({ name: t, columns })))),
     editing ? `${d.id}|cols` : 'off',
   )
 
@@ -145,7 +146,16 @@ function Detail({ d, onSaved }: { d: WhDataset; onSaved: () => void }) {
         {editing && !meta.data ? (
           meta.status === 'error' ? <ErrorState message={meta.error ?? tr('')} onRetry={meta.reload} /> : <Skeleton h={200} />
         ) : (
+          <>
+          {editing && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <Button size="sm" icon={<RotateCw size={14} className={meta.status === 'loading' ? 'spin' : undefined} aria-hidden />} onClick={meta.reload} title={tr('Baca ulang kolom tabel sumber, mis. setelah tim data menambah kolom')}>
+                {tr('Muat ulang kolom')}
+              </Button>
+            </div>
+          )}
           <MappingEditor model={editing ? model : d.semantic} tables={meta.data ?? d.semantic.sources.map((x) => ({ name: x.table, columns: columnsFromModel(d.semantic, x.alias) }))} onChange={setModel} readOnly={!editing} />
+          </>
         )}
         {problems.length > 0 && <div className="callout callout--warning" style={{ marginTop: 12 }}><span>{tr('Perlu dilengkapi:')}<ul className={s.problems}>{problems.map((p) => <li key={p}>{p}</li>)}</ul></span></div>}
       </Card>

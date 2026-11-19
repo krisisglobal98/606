@@ -34,6 +34,7 @@ describe('menu permissions', () => {
     assert.deepEqual(requiredMenus('GET', '/api/saved-reports'), [['report.operasional']])
     assert.deepEqual(requiredMenus('POST', '/api/saved-reports'), [['analisis']])
     assert.deepEqual(requiredMenus('DELETE', '/api/saved-reports/srp-1'), [['report.operasional']])
+    assert.deepEqual(requiredMenus('PATCH', '/api/saved-reports/srp-1'), [['report.operasional']])
     // connections come from .env; their names and tables are read only to build datasets
     assert.deepEqual(requiredMenus('GET', '/api/dw/connections'), [['data.dataset']])
     assert.deepEqual(requiredMenus('GET', '/api/dw/connections/x/schemas/public/tables'), [['data.dataset']])

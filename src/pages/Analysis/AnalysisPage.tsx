@@ -161,7 +161,9 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
   const found = catalog.datasets.find((d) => d.id === datasetId) ?? null
   // The page opens empty and light: no dataset is loaded and no query is sent until the user chooses data (or picks
   // up the last analysis of this session). Choosing marks the page as started until the user leaves it.
-  const [started, setStarted] = useState(false)
+  // Opened from Laporan → Ubah di Analisis: the report's layout is shown at once.
+  const [started, setStarted] = useState(() => useAnalysisStore.getState().takeStartNow())
+  const editing = useAnalysisStore((st) => (st.editing && st.editing.datasetId === datasetId ? st.editing : null))
   // The list carries no date coverage (it sends no source query, so the page opens fast). The chosen dataset's
   // coverage and source state are asked now, alongside the first analysis query, which does not wait for it.
   const chosenId = started && found && found.access?.status !== 'denied' ? found.id : null
@@ -367,6 +369,7 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
         )}
         <div className={s.saveBar} hidden={focus}>
           <FilterSummary dataset={dataset} onOpen={() => setFilterOpen(true)} />
+          {editing && <span className="t-meta" role="status">{tr('Mengubah laporan "{0}"', editing.name)}</span>}
           <Button size="sm" icon={<Save size={14} aria-hidden />} disabled={!query} title={query ? undefined : tr('Pilih minimal satu measure lebih dulu')} onClick={() => setSaving(true)}>
             {tr('Simpan Laporan')}
           </Button>

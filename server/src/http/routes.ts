@@ -157,7 +157,9 @@ export function registerRoutes(app: FastifyInstance, k: Container) {
   type TP = { Params: { id: string; schema: string; table: string }; Querystring: { fresh?: string } }
   app.get<TP>(`${tableRoute}/columns`, async (req) => {
     const u = requireRole(req, 'admin', 'analyst')
-    const cols = (await k.meta.table(conn(req.params.id), Ident.parse(req.params.schema), Ident.parse(req.params.table), req.abort)).columns
+    // fresh=1: read the structure now (a column just added at the source, generated columns included) and replace the
+    // cached metadata, so the dataset's queries see the new column at once too.
+    const cols = (await k.meta.table(conn(req.params.id), Ident.parse(req.params.schema), Ident.parse(req.params.table), req.abort, req.query.fresh === '1')).columns
     // Sample values of the planner statistics are table data: only for unrestricted_data holders (K-10).
     return k.dataAccess.isUnrestricted(u) ? cols : cols.map((c) => (c.stats ? { ...c, stats: { ...c.stats, commonValues: [], min: null, max: null } } : c))
   })

@@ -4,20 +4,21 @@ import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
 import type { DataScope, Dataset, Filter } from '@/types/contracts'
 import { FilterControls } from './FilterControls'
+import { activeFields } from './fieldFilter'
 import { tr } from '@/i18n'
 
 type State = { filter: Filter; scope: DataScope }
 
 /** Compares filters by meaning: an empty field filter or an empty value list equals none. */
 export function normalized({ filter, scope }: State) {
-  const fields = Object.fromEntries(Object.entries(filter.fields ?? {}).filter(([, v]) => !!v).sort(([a], [b]) => a.localeCompare(b)))
+  const fields = Object.fromEntries(activeFields(filter.fields))
   const sc = Object.fromEntries(Object.entries(scope).filter(([, v]) => v?.length).map(([k, v]) => [k, [...v!].sort()] as const).sort(([a], [b]) => a.localeCompare(b)))
   return JSON.stringify([filter.dateFrom, filter.dateTo, fields, sc])
 }
 const same = (a: State, b: State) => normalized(a) === normalized(b)
 
 /** Number of active value filters (single-value fields and multi-value lists; the period is always set). */
-export const activeFilterCount = ({ filter, scope }: State) => Object.values(filter.fields ?? {}).filter(Boolean).length + Object.values(scope).filter((v) => v?.length).length
+export const activeFilterCount = ({ filter, scope }: State) => activeFields(filter.fields).length + Object.values(scope).filter((v) => v?.length).length
 
 interface Props {
   dataset: Dataset
