@@ -35,9 +35,10 @@ export function SavedReportGrid({ report, dataset, filter, scope, focus, onToggl
     ? { datasetId: dataset.id, scope, filter, dimensions: dims.map((d) => d.id), measures: [...new Set([...server, ...kpiMeasures(dataset, engine)])], chartBy: 'trend' }
     : null
   const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, state.settings[m]])), measures.some((m) => engine.defs.get(m)?.needsMonth))
-  const hier = useHierarchy(query, withCounts, windows)
+  const columnDim = state.table.columnDim && !l.dimensions.includes(state.table.columnDim) ? state.table.columnDim : null
+  const hier = useHierarchy(query, withCounts, windows, columnDim)
   return query ? (
-    <PivotGrid hier={hier} engine={engine} dims={dims} periodLabel={`${formatDate(filter.dateFrom)} – ${formatDate(filter.dateTo)}${hier.reportDate ? tr(' · tanggal laporan {0}', formatDate(hier.reportDate)) : ''}`} focus={focus} onToggleFocus={onToggleFocus} state={state} onChangeFilter={onChangeFilter} />
+    <PivotGrid hier={hier} engine={engine} dims={dims} columnChoices={[...fields.values()].filter((f) => f.kind === 'dimension')} periodLabel={`${formatDate(filter.dateFrom)} – ${formatDate(filter.dateTo)}${hier.reportDate ? tr(' · tanggal laporan {0}', formatDate(hier.reportDate)) : ''}`} focus={focus} onToggleFocus={onToggleFocus} state={state} onChangeFilter={onChangeFilter} />
   ) : (
     <Card><EmptyState title={tr('Laporan ini tidak punya measure')} message={tr('Measure yang disimpan sudah tidak ada di dataset.')} /></Card>
   )

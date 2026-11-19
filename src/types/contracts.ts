@@ -242,12 +242,16 @@ export const GridRequestSchema = z.object({
   withCounts: z.boolean().optional(),
   /** Report-date windows: hi = H.I (the report date), sdhi = S.D.H.I (month to the report date), ytd = year to it. */
   windows: z.array(z.enum(['hi', 'sdhi', 'ytd', 'mon'])).optional(),
+  /** Matrix: a dimension whose values become columns (e.g. hari), with the row total at the right. */
+  columnDim: z.string().nullable().optional(),
 })
 export type GridRequest = z.infer<typeof GridRequestSchema>
 export type ReportWindow = 'hi' | 'sdhi' | 'ytd' | 'mon'
 
 const BaseValuesSchema = z.record(z.string(), z.number().nullable())
-export const GridAggSchema = z.object({ cur: BaseValuesSchema, prev: BaseValuesSchema, hi: BaseValuesSchema.optional(), sdhi: BaseValuesSchema.optional(), ytd: BaseValuesSchema.optional(), mon: BaseValuesSchema.optional() })
+const GridAggBaseSchema = z.object({ cur: BaseValuesSchema, prev: BaseValuesSchema, hi: BaseValuesSchema.optional(), sdhi: BaseValuesSchema.optional(), ytd: BaseValuesSchema.optional(), mon: BaseValuesSchema.optional() })
+/** cols (matrix): column value → the same values for that column (the row total stays in cur/prev/...). */
+export const GridAggSchema = GridAggBaseSchema.extend({ cols: z.record(z.string(), GridAggBaseSchema).optional() })
 export type GridAgg = z.infer<typeof GridAggSchema>
 
 export const GridRowSchema = GridAggSchema.extend({
@@ -265,5 +269,7 @@ export const GridResponseSchema = z.object({
   sourceRows: z.number().nullable(),
   /** The report date the H.I / S.D.H.I / YTD windows used (present when windows were asked). */
   reportDate: z.string().optional(),
+  /** Matrix: the column values, in order. */
+  columns: z.array(z.object({ value: z.string().nullable(), label: z.string() })).optional(),
 })
 export type GridResponse = z.infer<typeof GridResponseSchema>

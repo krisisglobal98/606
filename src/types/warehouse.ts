@@ -95,6 +95,8 @@ export interface SemanticDimension {
   id: string
   label: string
   columns: Record<string, string | null>
+  /** Row order separate from the label: a numeric column per source (e.g. urutan). */
+  sortColumns?: Record<string, string | null>
   description?: string
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Download, Filter as FilterIcon, Maximize2, Minimize2, MoreHorizontal, Paintbrush, Pin, PinOff, Settings2, Snowflake } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Download, FileSpreadsheet, Printer, Filter as FilterIcon, Maximize2, Minimize2, MoreHorizontal, Paintbrush, Pin, PinOff, Settings2, Snowflake } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { Dropdown } from '@/components/common/Dropdown'
@@ -11,13 +11,14 @@ import { ruleMatches, useGridPrefs } from '@/stores/gridPrefsStore'
 import { toast } from '@/stores/uiStore'
 import type { Field, GridAgg } from '@/types/contracts'
 import { csvCell } from '@/utils/csv'
+import { sheetXml, workbook, type XCell } from '@/utils/xlsx'
 import { formatNumber, formatSigned } from '@/utils/format'
 import t from '../ResultTable.module.css'
 import g from './PivotGrid.module.css'
 import { FormatRulesModal } from './FormatRulesModal'
 import { locate } from '@/stores/measureLayout'
 import type { GridState } from './gridState'
-import { buildHeader, type HeaderCell, type LeafCol } from './headerModel'
+import { buildHeader, matrixHeader, type HeaderCell, type LeafCol } from './headerModel'
 import type { HNode, Hierarchy } from './useHierarchy'
 import { tr } from '@/i18n'
 
@@ -48,6 +49,8 @@ interface Props {
   state?: GridState
   /** Opens the page's filter: offered when the period and filters return no data. */
   onChangeFilter?: () => void
+  /** Dimensions that can be shown as columns (matrix). */
+  columnChoices?: Field[]
 }
 
 /** No row for the period and filters: say so, with the period, and point the user to the filter. */
@@ -76,7 +79,7 @@ export function NoDataForPeriod({ periodLabel, onChangeFilter, height }: { perio
  *   calculations); with no configuration every measure is one plain column.
  * - Rows are virtualised, so only the visible window is in the DOM.
  */
-export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocus, titleInfo, state, onChangeFilter }: Props) {
+export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocus, titleInfo, state, onChangeFilter, columnChoices = [] }: Props) {
   const storeTable = useAnalysisStore((st) => st.table)
   const storeSetTable = useAnalysisStore((st) => st.setTable)
   const storeLayout = useAnalysisStore((st) => st.measureLayout)
@@ -101,18 +104,25 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
   const total = hier.total
 
   /* ---------- columns and header rows, regenerated from the Layout ---------- */
-  const header = useMemo(() => buildHeader(layout, settings, engine), [layout, settings, engine])
+  const baseHeader = useMemo(() => buildHeader(layout, settings, engine), [layout, settings, engine])
+  // Matrix: the column values (from the response) each get the Layout's columns, and Total at the right end.
+  const columnDim = opts.columnDim && !dims.some((d) => d.id === opts.columnDim) ? opts.columnDim : null
+  const header = useMemo(() => (columnDim && hier.columns ? matrixHeader(baseHeader, hier.columns, columnDim) : baseHeader), [baseHeader, columnDim, hier.columns])
   const cols = header.leaves
   const groupName = (id: string | null) => (id ? (layout.find((b) => b.id === id && b.kind === 'group') as { name: string } | undefined)?.name : undefined)
   /** Full column name: Group / Measure / Calculation (parts that are not configured are omitted). */
   const colLabel = (c: Col) => {
-    const single = cols.filter((x) => x.m === c.m).length === 1 && c.calc === 'value'
-    return [groupName(c.group), c.meta.measureLabel, single ? null : c.meta.calcLabel].filter(Boolean).join(' / ')
+    const single = cols.filter((x) => x.m === c.m && x.col === c.col).length === 1 && c.calc === 'value'
+    const colName = c.col === undefined ? (columnDim ? tr('Total') : null) : (hier.columns?.find((x) => (x.value ?? '\u0000') === c.col)?.label ?? c.col)
+    return [colName, groupName(c.group), c.meta.measureLabel, single ? null : c.meta.calcLabel].filter(Boolean).join(' / ')
   }
 
   // Values are rounded to the column's decimals before formatting and colouring, so "−0,0" never shows.
   const value = (c: Col, agg: GridAgg) => {
-    const v = engine.cell(c.m, c.calc, agg, total, settings[c.m])
+    // Matrix: a column value's cell reads that column's values; nothing there = an empty cell.
+    const a = c.col === undefined ? agg : agg.cols?.[c.col]
+    if (!a) return null
+    const v = engine.cell(c.m, c.calc, a, c.col === undefined ? total : (total?.cols?.[c.col] ?? null), settings[c.m])
     if (v == null || !Number.isFinite(v)) return null
     const f = 10 ** c.meta.decimals
     const r = Math.round(v * f) / f
@@ -219,8 +229,10 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
     ro.observe(el)
     return () => ro.disconnect()
   }, [tableShown, focus, onScroll])
-  const start = Math.max(0, Math.floor(scroll.top / rowH) - OVERSCAN)
-  const end = Math.min(rows.length, Math.ceil((scroll.top + scroll.h) / rowH) + OVERSCAN)
+  // Printing renders every row (the page is paper, not a scroll window).
+  const [printing, setPrinting] = useState(false)
+  const start = printing ? 0 : Math.max(0, Math.floor(scroll.top / rowH) - OVERSCAN)
+  const end = printing ? rows.length : Math.min(rows.length, Math.ceil((scroll.top + scroll.h) / rowH) + OVERSCAN)
   const slice = rows.slice(start, end)
 
   /* ---------- formatting ---------- */
@@ -323,9 +335,42 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
     )
   }
 
+  /* ---------- transposed (sheet R): measures as rows, their display columns as columns ---------- */
+  // Only for a table without row dimensions (one row of totals): each measure keeps its own unit and decimals, and a
+  // Measure Group becomes a subtitle row above its measures (Man Power → Workshop / Traksi / Total).
+  const transposed = !!opts.transpose && !dims.length && !columnDim
+  const tCalcs = [...new Map(cols.map((c) => [c.calc, c.meta.calcLabel])).entries()]
+  const tRows: ({ t: 'group'; name: string } | { t: 'measure'; m: string; label: string; unit: string; leaves: Col[] })[] = []
+  for (const c of cols) {
+    const last = tRows.at(-1)
+    if (last?.t === 'measure' && last.m === c.m) { last.leaves.push(c); continue }
+    const prevGroup = [...tRows].reverse().find((r) => r.t === 'measure') as { leaves: Col[] } | undefined
+    if (c.group && prevGroup?.leaves[0]?.group !== c.group) tRows.push({ t: 'group', name: groupName(c.group) ?? '' })
+    tRows.push({ t: 'measure', m: c.m, label: c.meta.measureLabel, unit: c.meta.unit, leaves: [c] })
+  }
+  const tCell = (r: { leaves: Col[] }, calc: DisplayCalc) => {
+    const c = r.leaves.find((x) => x.calc === calc)
+    if (!c || !total) return { c, v: null }
+    return { c, v: value(c, total) }
+  }
+
   /* ---------- export (visible rows, as shown) ---------- */
   const exportCsv = () => {
     const q = csvCell
+    if (transposed) {
+      const lines = [[tr('Ukuran'), tr('Satuan'), ...tCalcs.map(([, l]) => l)].map(q).join(',')]
+      for (const r of tRows) {
+        if (r.t === 'group') { lines.push(q(r.name)); continue }
+        lines.push([q(r.label), q(r.unit), ...tCalcs.map(([calc]) => { const { v } = tCell(r, calc); return v == null ? '' : String(Math.round(v * 1e6) / 1e6) })].join(','))
+      }
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
+      a.download = 'dod-analisis-tabel.csv'
+      a.click()
+      URL.revokeObjectURL(a.href)
+      toast(tr('File CSV diunduh (baris yang sedang tampil).'), 'success')
+      return
+    }
     // CSV follows the Layout: one column per leaf, named Group / Measure / Calculation (unit).
     const head = [...(hcols.length ? hcols.map((d) => d.label) : ['']), ...cols.map((c) => `${colLabel(c)}${c.meta.unit ? ` (${c.meta.unit})` : ''}`)]
     const lines = [head.map(q).join(',')]
@@ -348,6 +393,77 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
     toast(tr('File CSV diunduh (baris yang sedang tampil).'), 'success')
   }
 
+  /* ---------- Excel: the table as on screen (header rows merged like the screen, numbers as numbers) ---------- */
+  const exportXlsx = () => {
+    const grid: XCell[][] = []
+    const num = (c: Col, v: number | null): Exclude<XCell, null> => ({ v: v == null ? null : Math.round(v * 10 ** c.meta.decimals) / 10 ** c.meta.decimals, decimals: c.meta.decimals })
+    let freezeRows = 1
+    let freezeCols = 1
+    let widths: number[]
+    if (transposed) {
+      grid.push([tr('Ukuran'), tr('Satuan'), ...tCalcs.map(([, l]) => l)].map((v) => ({ v, header: true })))
+      for (const r of tRows) {
+        if (r.t === 'group') grid.push([{ v: r.name, bold: true }])
+        else grid.push([{ v: r.label }, { v: r.unit }, ...tCalcs.map(([calc]) => { const { c, v } = tCell(r, calc); return c ? num(c, v) : null })])
+      }
+      widths = [32, 10, ...tCalcs.map(() => 14)]
+    } else {
+      // Header: the dimension columns span every header row; the Layout's cells are placed as the browser places them.
+      const nLab = Math.max(1, hcols.length)
+      const hRows = header.rows.length
+      const width = nLab + cols.length
+      for (let r = 0; r < hRows; r++) grid.push(Array.from({ length: width }, () => null))
+      const taken = Array.from({ length: hRows }, () => Array.from({ length: width }, () => false))
+      for (let i = 0; i < nLab; i++) {
+        grid[0]![i] = { v: hcols[i]?.label ?? '', header: true, rowSpan: hRows }
+        for (let r = 0; r < hRows; r++) taken[r]![i] = true
+      }
+      header.rows.forEach((row, r) => {
+        let at = 0
+        for (const cell of row) {
+          while (taken[r]![at]) at++
+          const rs = Math.min(cell.rowSpan, hRows - r)
+          grid[r]![at] = { v: cell.small ? `${cell.label} (${cell.small})` : cell.label, header: true, colSpan: cell.colSpan, rowSpan: rs }
+          for (let y = r; y < r + rs; y++) for (let x = at; x < at + cell.colSpan; x++) taken[y]![x] = true
+          at += cell.colSpan
+        }
+      })
+      // Cells covered by a merge are written empty with the header style, so borders and fill continue.
+      for (let r = 0; r < hRows; r++) for (let x = 0; x < width; x++) if (!grid[r]![x] && taken[r]![x]) grid[r]![x] = { v: null, header: true }
+      for (const r of rows) {
+        if (r.t === 'state') continue
+        const sub = r.t === 'sub'
+        const lab = Array.from({ length: nLab }, (_, i): XCell => (i === r.n.level ? { v: sub ? tr('{0} Total', r.n.label) : r.n.label, bold: sub } : null))
+        const blank = r.t === 'node' && r.open && opts.subtotal
+        grid.push([...lab, ...cols.map((c) => (blank ? null : { ...num(c, value(c, r.n.agg)), bold: sub }))])
+      }
+      if ((opts.grandTotal || !dims.length) && total) grid.push([{ v: tr('Grand Total'), bold: true }, ...Array.from({ length: nLab - 1 }, () => null), ...cols.map((c) => ({ ...num(c, value(c, total)), bold: true }))])
+      freezeRows = hRows
+      freezeCols = nLab
+      widths = [...Array.from({ length: nLab }, () => 24), ...cols.map(() => 13)]
+    }
+    const bytes = workbook(tr('Tabel Hasil'), sheetXml(grid, { widths, freezeRows, freezeCols }))
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    a.download = 'dod-analisis-tabel.xlsx'
+    a.click()
+    URL.revokeObjectURL(a.href)
+    toast(tr('File Excel diunduh (baris yang sedang tampil, tata letak seperti di layar).'), 'success')
+  }
+  /** Print / PDF: the browser's print dialog with the table only (print styles hide the rest of the page). */
+  const printTable = () => {
+    setPrinting(true)
+    document.body.classList.add('print-table')
+    const done = () => {
+      document.body.classList.remove('print-table')
+      setPrinting(false)
+      window.removeEventListener('afterprint', done)
+    }
+    window.addEventListener('afterprint', done)
+    // After every row is in the page.
+    setTimeout(() => window.print(), 50)
+  }
+
   /* ---------- body ---------- */
   let body: React.ReactNode
   if (hier.status === 'loading' || hier.status === 'idle')
@@ -360,6 +476,38 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
     )
   else if (hier.status === 'error') body = <ErrorState message={hier.error ?? tr('')} onRetry={hier.reload} />
   else if (!hier.roots.length && !(total && !dims.length)) body = <NoDataForPeriod periodLabel={periodLabel} onChangeFilter={onChangeFilter} />
+  else if (transposed)
+    body = (
+      <div className={t.wrap}>
+        <table className={`${t.pv} ${g.grid}`} aria-label={tr('Tabel Hasil, ukuran sebagai baris')}>
+          <thead>
+            <tr>
+              <th scope="col" className={t.dimTh}>{tr('Ukuran')}</th>
+              <th scope="col">{tr('Satuan')}</th>
+              {tCalcs.map(([calc, label]) => <th key={calc} scope="col">{label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {tRows.map((r, i) =>
+              r.t === 'group' ? (
+                <tr key={`g${i}`} className={t.total}>
+                  <th scope="rowgroup" colSpan={2 + tCalcs.length} style={{ textAlign: 'left' }}>{r.name}</th>
+                </tr>
+              ) : (
+                <tr key={r.m}>
+                  <th scope="row" style={{ textAlign: 'left', fontWeight: 500 }}>{r.label}</th>
+                  <td style={{ textAlign: 'left' }}>{r.unit}</td>
+                  {tCalcs.map(([calc]) => {
+                    const { c, v } = tCell(r, calc)
+                    return <td key={calc} className={c ? styleFor(c, v) : undefined}>{c ? fmt(c, v) : ''}</td>
+                  })}
+                </tr>
+              ),
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
   else {
     const hdrRows = header.rows.length
     body = (
@@ -392,7 +540,8 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
                   {row.map((cell) => {
                     const leaf = cell.leaf
                     const spanning = cell.colSpan > 1 || cell.kind === 'group'
-                    const draggable = cell.kind === 'measure' || cell.kind === 'group'
+                    // The matrix's column-value cells (ref col:…) are headings only, not Measure Groups.
+                    const draggable = (cell.kind === 'measure' || cell.kind === 'group') && !cell.ref.startsWith('col:')
                     return (
                       <th
                         key={cell.key}
@@ -523,11 +672,22 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
 
   const shown = rows.filter((r) => r.t === 'node').length
   return (
+    <div data-print-table>
     <Card
       title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{titleInfo}{tr('Tabel Hasil')}</span>}
       subtitle={hier.status === 'ok' ? tr('{0} baris tampil · {1} dari {2} level hierarki{3}', formatNumber(shown), hcols.length, dims.length, periodLabel ? ` · ${periodLabel}` : '') : undefined}
       actions={
         <>
+          {columnChoices.length > 0 && (
+            <label className="t-meta" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} title={tr('Tampilkan nilai sebuah dimensi sebagai kolom (mis. Hari 1–31), dengan total di ujung kanan')}>
+              {tr('Kolom')}
+              <select className="select select--sm" value={columnDim ?? ''} onChange={(e) => setTable({ columnDim: e.target.value || null })} aria-label={tr('Dimensi sebagai kolom')}>
+                <option value="">{tr('— tidak ada —')}</option>
+                {columnChoices.filter((f) => !dims.some((d) => d.id === f.id)).map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </select>
+            </label>
+          )}
+          {!dims.length && !columnDim && <Switch label={tr('Ukuran sebagai baris')} checked={!!opts.transpose} onChange={(v) => setTable({ transpose: v })} />}
           <Switch label={tr('Subtotal')} checked={opts.subtotal} onChange={(v) => setTable({ subtotal: v })} />
           <Switch label={tr('Grand Total')} checked={opts.grandTotal} onChange={(v) => setTable({ grandTotal: v })} />
           <Button size="sm" active={opts.conditional} icon={<Paintbrush size={13} aria-hidden />} onClick={() => setTable({ conditional: !opts.conditional })} aria-pressed={opts.conditional}>
@@ -571,6 +731,12 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
           )}
           <Button size="sm" iconOnly icon={<ChevronsUpDown size={14} />} onClick={() => void hier.expandLevel(rows.flatMap((r) => (r.t === 'node' ? [r.n] : [])), maxLevel)} disabled={hier.status !== 'ok' || maxLevel >= dims.length - 1} aria-label={tr('Expand All: buka satu level lagi')} title={tr('Expand All (satu level per klik)')} />
           <Button size="sm" iconOnly icon={<ChevronsDownUp size={14} />} onClick={hier.collapseAll} disabled={!hier.expanded.size} aria-label={tr('Collapse All')} title={tr('Collapse All')} />
+          <Button size="sm" icon={<FileSpreadsheet size={13} aria-hidden />} onClick={exportXlsx} disabled={hier.status !== 'ok'} title={tr('Excel dengan tata letak seperti di layar (header bertingkat, total)')}>
+            {tr('Ekspor Excel')}
+          </Button>
+          <Button size="sm" icon={<Printer size={13} aria-hidden />} onClick={printTable} disabled={hier.status !== 'ok'} title={tr('Cetak tabel, atau simpan sebagai PDF dari dialog cetak')}>
+            {tr('Cetak / PDF')}
+          </Button>
           <Button size="sm" icon={<Download size={13} aria-hidden />} onClick={exportCsv} disabled={hier.status !== 'ok'}>
             {tr('Ekspor CSV')}
           </Button>
@@ -585,5 +751,6 @@ export function PivotGrid({ hier, engine, dims, periodLabel, focus, onToggleFocu
       {body}
       {rulesOpen && <FormatRulesModal engine={engine} columns={cols.map((c) => ({ key: c.key, label: colLabel(c) }))} onClose={() => setRulesOpen(false)} />}
     </Card>
+    </div>
   )
 }

@@ -24,6 +24,11 @@ export const DimensionSchema = z.object({
   label: z.string().min(1),
   /** Column per source alias; null when the concept does not exist in that source. */
   columns: z.record(z.string(), z.string().nullable()),
+  /**
+   * Row order separate from the label: a numeric column per source alias (e.g. urutan), the smallest value of a group
+   * sorts it. Rows without a key come after, by label.
+   */
+  sortColumns: z.record(z.string(), z.string().nullable()).optional(),
   description: z.string().optional(),
 })
 
@@ -237,6 +242,12 @@ export function validateModel(m: SemanticModel, tables: TableMetadata[]): string
       else if (name && !col(alias, name)) out.push(`Dimensi ${d.label}: kolom ${table(alias)?.name ?? alias}.${name} tidak ditemukan.`)
     }
     if (!Object.values(d.columns).some(Boolean)) out.push(`Dimensi ${d.label} belum dipetakan ke kolom mana pun.`)
+    for (const [alias, name] of Object.entries(d.sortColumns ?? {})) {
+      if (!name) continue
+      const c = col(alias, name)
+      if (!c) out.push(`Dimensi ${d.label}: kolom urut ${table(alias)?.name ?? alias}.${name} tidak ditemukan.`)
+      else if (c.typeCategory !== 'number') out.push(`Dimensi ${d.label}: kolom urut ${name} harus berupa angka.`)
+    }
   }
   for (const me of m.measures) {
     dup(me.id)

@@ -18,12 +18,12 @@ const skip = host ? false : 'set DOD_DB_* (.env) to run the measure SQL test on 
 
 const col = (name: string, dataType: string, typeCategory: 'string' | 'number' | 'date', ordinal: number) => ({ name, ordinal, dataType, typeCategory, nullable: true, defaultValue: null, comment: null, stats: null })
 const table = { schema: 'pg_temp', name: 't_status', kind: 'table', estimatedRows: null, totalBytes: null, columnCount: 5, comment: null, lastAnalyzedAt: null, canSelect: true, indexes: [],
-  columns: [col('tanggal', 'date', 'date', 1), col('business_unit', 'text', 'string', 2), col('unit', 'text', 'string', 3), col('status', 'text', 'string', 4), col('km', 'numeric', 'number', 5)] } as unknown as TableMetadata
+  columns: [col('tanggal', 'date', 'date', 1), col('business_unit', 'text', 'string', 2), col('unit', 'text', 'string', 3), col('status', 'text', 'string', 4), col('km', 'numeric', 'number', 5), col('urut', 'numeric', 'number', 6)] } as unknown as TableMetadata
 
 const model = (extra: SemanticModel['measures'] = []): SemanticModel => SemanticModelSchema.parse({
   version: 1,
   sources: [{ alias: 'actual', table: 't_status', label: 'Status', role: 'actual', dateColumn: 'tanggal' }],
-  dimensions: [{ id: 'bisnis_unit', label: 'BU', columns: { actual: 'business_unit' } }, { id: 'unit', label: 'Unit', columns: { actual: 'unit' } }, { id: 'status', label: 'Status', columns: { actual: 'status' } }],
+  dimensions: [{ id: 'bisnis_unit', label: 'BU', columns: { actual: 'business_unit' } }, { id: 'unit', label: 'Unit', columns: { actual: 'unit' } }, { id: 'status', label: 'Status', columns: { actual: 'status' }, sortColumns: { actual: 'urut' } }],
   measures: [
     { id: 'hari_b', label: 'B', unit: 'hari', decimals: 0, type: 'sum', source: 'actual', column: 'km', where: { dim: 'status', values: ['B'] } },
     { id: 'km', label: 'KM', unit: 'km', decimals: 0, type: 'sum', source: 'actual', column: 'km' },
@@ -44,9 +44,10 @@ describe('conditional and distinct measures on PostgreSQL (TEMP table, rolled ba
     client = new pg.Client({ host, port: Number(process.env.DOD_DB_PORT || 5432), database: process.env.DOD_DB_NAME, user: process.env.DOD_DB_USER, password: process.env.DOD_DB_PASSWORD, application_name: 'dod-test-measures' })
     await client.connect()
     await client.query('BEGIN')
-    await client.query('CREATE TEMP TABLE t_status (tanggal date, business_unit text, unit text, status text, km numeric) ON COMMIT DROP')
+    await client.query('CREATE TEMP TABLE t_status (tanggal date, business_unit text, unit text, status text, km numeric, urut numeric) ON COMMIT DROP')
     const rows = [['01', 'U1', 'B', 10], ['02', 'U1', 'B', 10], ['03', 'U1', 'S', 0], ['01', 'U2', 'S', 0], ['02', 'U2', 'S', 0], ['03', 'U2', 'S', 0], ['01', 'U3', 'R', 0], ['02', 'U3', 'B', 5], ['03', 'U3', 'B', 5]]
-    for (const [d, u, st, km] of rows) await client.query('INSERT INTO t_status VALUES ($1, $2, $3, $4, $5)', [`2026-01-${d}`, 'SAM-1', u, st, km])
+    const ORDER: Record<string, number> = { R: 1, B: 2, S: 3 }
+    for (const [d, u, st, km] of rows) await client.query('INSERT INTO t_status VALUES ($1, $2, $3, $4, $5, $6)', [`2026-01-${d}`, 'SAM-1', u, st, km, ORDER[st as string]])
   })
   after(async () => {
     await client?.query('ROLLBACK').catch(() => undefined)
@@ -80,6 +81,18 @@ describe('conditional and distinct measures on PostgreSQL (TEMP table, rolled ba
     assert.ok(pr.some((m) => /harus measure SUM/.test(m)), pr.join(' | '))
     const withSnap = new SqlBuilder(model([{ id: 's', label: 'S', unit: '', decimals: 0, type: 'snapshot', source: 'actual', column: 'km' }]), 'pg_temp', [table], dialectOf('postgresql'))
     assert.throws(() => withSnap.build({ dims: [], groupingSets: [[]], measures: ['s', 'unit_unik'], windows: [{ id: 'cur', from: '2026-01-01', to: '2026-01-03' }], filters: [], scope: { kind: 'all' } as never, limit: 10 }), /hitung unik tidak dapat ditampilkan bersama measure snapshot/)
+  })
+
+  test('sort key of a dimension: the smallest key of each group; a model without one keeps its statement', async () => {
+    const b = new SqlBuilder(model(), 'pg_temp', [table], dialectOf('postgresql'))
+    const q = b.build({ dims: ['status'], groupingSets: [[0]], measures: ['km'], windows: [{ id: 'cur', from: '2026-01-01', to: '2026-01-03' }, { id: 'prev', from: '2025-01-01', to: '2025-01-03' }], filters: [], scope: { kind: 'all' } as never, limit: 10 })
+    assert.equal(q.sortCol(0), 's0')
+    const rows = (await client.query(q.sql, q.params)).rows as Record<string, unknown>[]
+    assert.deepEqual(Object.fromEntries(rows.map((x) => [x.d0, Number(x.s0)])), { B: 2, R: 1, S: 3 })
+    const plain = SemanticModelSchema.parse({ ...model(), dimensions: model().dimensions.map((d) => ({ ...d, sortColumns: undefined })) })
+    const q2 = new SqlBuilder(plain, 'pg_temp', [table], dialectOf('postgresql')).build({ dims: ['status'], groupingSets: [[0]], measures: ['km'], windows: [{ id: 'cur', from: '2026-01-01', to: '2026-01-03' }], filters: [], scope: { kind: 'all' } as never, limit: 10 })
+    assert.equal(q2.sortCol(0), null)
+    assert.ok(!/s0/.test(q2.sql), 'no sort column in the statement')
   })
 
   test('the whole-month window of a report date', () => {

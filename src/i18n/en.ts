@@ -1364,4 +1364,21 @@ export const en: Record<string, string> = {
   "nilai, pisahkan koma": "values, comma separated",
   "Nilai syarat {0}": "Condition values of {0}",
   "Hapus syarat {0}": "Remove the condition of {0}",
+  // Matrix (dimension as columns), 2026-11-19
+  "Tampilkan nilai sebuah dimensi sebagai kolom (mis. Hari 1–31), dengan total di ujung kanan": "Show the values of a dimension as columns (e.g. Day 1–31), with the total at the right end",
+  "Dimensi sebagai kolom": "Dimension as columns",
+  // Transposed table, 2026-11-19
+  "Ukuran": "Measure",
+  "Tabel Hasil, ukuran sebagai baris": "Result table, measures as rows",
+  "Ukuran sebagai baris": "Measures as rows",
+  // Excel / PDF export and row sort key, 2026-11-19
+  "File Excel diunduh (baris yang sedang tampil, tata letak seperti di layar).": "Excel file downloaded (the rows shown, laid out as on screen).",
+  "Excel dengan tata letak seperti di layar (header bertingkat, total)": "Excel laid out as on screen (multi-level header, totals)",
+  "Ekspor Excel": "Export Excel",
+  "Cetak tabel, atau simpan sebagai PDF dari dialog cetak": "Print the table, or save it as PDF from the print dialog",
+  "Cetak / PDF": "Print / PDF",
+  "Urutan baris yang terpisah dari label: kolom angka (mis. urutan); kosong = urut menurut nilai": "Row order separate from the label: a numeric column (e.g. urutan); empty = by value",
+  "Kunci urut": "Sort key",
+  "Kunci urut {0}": "Sort key of {0}",
+  "— urut menurut nilai —": "— by value —",
 }

@@ -258,6 +258,33 @@ describe('data access through the API on PostgreSQL (TEMP tables, rolled back)',
     assert.equal(q.body.grandTotal.produksi, 140)
   })
 
+  test('matrix: day as columns with the row total at the right and totals per column, inside the scope only', async () => {
+    const g = (t: string, over: Record<string, unknown> = {}, body: Record<string, unknown> = {}) =>
+      call('POST', '/api/dw/analytics/grid', t, { query: Q('ds-ok', { measures: ['produksi'], ...over }), depth: 0, path: null, withTotal: true, columnDim: 'hari', ...body })
+    const r = await g('frg')
+    assert.equal(r.status, 200, JSON.stringify(r.body))
+    // frg: SAM-1 01-05 10, 01-06 20; SAM-2 01-07 30, 01-12 80; CLP-1 01-08 40, 01-13 90.
+    assert.deepEqual(r.body.columns.map((c: { value: string }) => c.value), ['2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-12', '2026-01-13'])
+    const sam1 = r.body.rows.find((x: { label: string }) => x.label === 'SAM-1')
+    assert.deepEqual([sam1.cur.produksi, sam1.cols['2026-01-05'].cur.produksi, sam1.cols['2026-01-06'].cur.produksi, sam1.cols['2026-01-07']], [30, 10, 20, undefined], 'row total + its days; no cell where it has no data')
+    assert.equal(r.body.total.cur.produksi, 270)
+    assert.equal(r.body.total.cols['2026-01-13'].cur.produksi, 90)
+    assert.equal(Object.values(r.body.total.cols as Record<string, { cur: { produksi: number } }>).reduce((a, x) => a + x.cur.produksi, 0), 270, 'the columns add up to the total')
+    // A scoped user sees the columns of his own rows only.
+    const s = await g('sam1')
+    assert.deepEqual(s.body.columns.map((c: { value: string }) => c.value), ['2026-01-05', '2026-01-06'])
+    // Children of a row keep the matrix.
+    const child = await call('POST', '/api/dw/analytics/grid', 'frg', { query: Q('ds-ok', { dimensions: ['bisnis_unit', 'afdeling'], measures: ['produksi'] }), depth: 1, path: ['SAM-1'], withTotal: false, columnDim: 'hari' })
+    assert.deepEqual(child.body.rows.map((x: { label: string; cols: Record<string, { cur: { produksi: number } }> }) => [x.label, Object.keys(x.cols)]), [['01', ['2026-01-05']], ['02', ['2026-01-06']]])
+    // Without a column dimension nothing changes; a column dimension used as a row, or unknown, is refused.
+    assert.equal((await g('frg', {}, { columnDim: null })).body.columns, undefined)
+    assert.equal((await g('frg', {}, { columnDim: 'bisnis_unit' })).body.error.code, 'COLUMN_DIM_IN_ROWS')
+    assert.equal((await g('frg', {}, { columnDim: 'tidak_ada' })).status, 400)
+    // More columns than allowed: a clear refusal (a year by day).
+    const many = await g('frg', { dimensions: [] }, { columnDim: 'afdeling' })
+    assert.equal(many.status, 200, 'few values are fine')
+  })
+
   test('distinct values and search: only values inside the scope; cache never crosses scopes', async () => {
     const v = async (t: string, q = '') => (await call('GET', `/api/dw/datasets/ds-ok/values?field=bisnis_unit${q ? `&q=${q}` : ''}`, t)).body.values
     assert.deepEqual(await v('frg'), ['CLP-1', 'SAM-1', 'SAM-2'])

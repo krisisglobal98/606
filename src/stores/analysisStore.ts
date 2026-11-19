@@ -35,6 +35,10 @@ export interface TableOptions {
    * while they take at most half of the table's visible width, so measures can always scroll.
    */
   freeze?: string[] | null
+  /** Matrix: a dimension shown as columns (e.g. hari = day 1–31), with the row total at the right. */
+  columnDim?: string | null
+  /** Measures as rows and their columns (Value, H.I, S.D.H.I, …) as columns, for a table without row dimensions. */
+  transpose?: boolean
 }
 
 /**

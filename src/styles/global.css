@@ -916,3 +916,18 @@ input[type='radio'] {
     animation: none !important;
   }
 }
+
+/* Print / PDF of the result table (PivotGrid "Cetak / PDF"): the table card only, landscape, rows not clipped. */
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body.print-table * { visibility: hidden; }
+  body.print-table [data-print-table], body.print-table [data-print-table] * { visibility: visible; }
+  body.print-table [data-print-table] { position: absolute !important; left: 0; top: 0; width: 100%; }
+  body.print-table [data-print-table] button, body.print-table [data-print-table] select, body.print-table [data-print-table] label { display: none !important; }
+  body.print-table [data-print-table] { box-shadow: none !important; border: 0 !important; }
+  body.print-table [data-print-table] * { max-height: none !important; overflow: visible !important; position: static !important; }
+  body.print-table table { width: 100% !important; font-size: 8pt; border-collapse: collapse; }
+  body.print-table thead { display: table-header-group; }
+  body.print-table tr { break-inside: avoid; }
+  body.print-table th, body.print-table td { border: 1px solid #b0bcc8 !important; padding: 2px 4px !important; }
+}

@@ -21,7 +21,7 @@ export interface Branch {
 }
 
 const keyOf = (path: (string | null)[]) => JSON.stringify(path)
-const toNodes = (r: GridResponse): HNode[] => r.rows.map((x) => ({ key: keyOf(x.path), path: x.path, label: x.label, level: x.path.length - 1, hasChildren: x.hasChildren, agg: { cur: x.cur, prev: x.prev, hi: x.hi, sdhi: x.sdhi, ytd: x.ytd, mon: x.mon } }))
+const toNodes = (r: GridResponse): HNode[] => r.rows.map((x) => ({ key: keyOf(x.path), path: x.path, label: x.label, level: x.path.length - 1, hasChildren: x.hasChildren, agg: { cur: x.cur, prev: x.prev, hi: x.hi, sdhi: x.sdhi, ytd: x.ytd, mon: x.mon, cols: x.cols } }))
 const message = (e: unknown) => (e instanceof ApiError ? e.message : tr('Data tabel gagal dimuat.'))
 
 /**
@@ -30,10 +30,10 @@ const message = (e: unknown) => (e instanceof ApiError ? e.message : tr('Data ta
  * Expansion is kept while the dimensions stay the same (filters/measures change → reload the open branches),
  * and resets when the hierarchy itself changes.
  */
-export function useHierarchy(query: AnalyticsQuery | null, withCounts = false, windows: ReportWindow[] = []) {
-  // Report-date windows (H.I / S.D.H.I / YTD) are asked only when a column shows them.
-  const win = windows.length ? { windows } : {}
-  const qkey = JSON.stringify([query, withCounts, windows])
+export function useHierarchy(query: AnalyticsQuery | null, withCounts = false, windows: ReportWindow[] = [], columnDim: string | null = null) {
+  // Report-date windows (H.I / S.D.H.I / YTD) are asked only when a column shows them; columnDim = matrix.
+  const win = { ...(windows.length ? { windows } : {}), ...(columnDim ? { columnDim } : {}) }
+  const qkey = JSON.stringify([query, withCounts, windows, columnDim])
   const dimsKey = JSON.stringify(query ? [query.datasetId, query.dimensions] : null)
   const [tops, setTops] = useState<Record<string, { status: 'ok' | 'error'; res?: GridResponse; error?: string }>>({})
   const [branches, setBranches] = useState<Record<string, Branch>>({})
@@ -155,6 +155,8 @@ export function useHierarchy(query: AnalyticsQuery | null, withCounts = false, w
     total: top?.res?.total ?? null,
     /** Report date used by the H.I / S.D.H.I / YTD columns (null when none is shown). */
     reportDate: top?.res?.reportDate ?? null,
+    /** Matrix: the column values of the top level (children use the same columns). */
+    columns: top?.res?.columns ?? null,
     sourceRows: top?.res?.sourceRows ?? null,
     truncated: top?.res?.truncated ?? false,
     expanded,

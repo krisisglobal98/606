@@ -52,6 +52,8 @@ export interface BuiltQuery {
   col: (measureId: string, windowId: string) => string
   /** Column holding the source row count for a window. */
   countCol: (alias: string, windowId: string) => string
+  /** Column holding the sort key of dimension i, when that dimension has one (null otherwise). */
+  sortCol: (i: number) => string | null
   sources: SemanticSource[]
 }
 
@@ -162,6 +164,10 @@ export class SqlBuilder {
     const winParams = r.windows.map((w) => ({ id: w.id, from: p.add(w.from, 'date'), to: p.add(w.to, 'date') }))
     const filterParams = r.filters.map((f) => (f.like != null ? { dim: f.dim, like: true, ph: p.add(D.containsValue(f.like), 'text') } : { dim: f.dim, like: false, ph: p.add(f.values ?? [], 'text[]') }))
     const n = r.dims.length
+    // Sort keys (dimension sortColumns): only when one of the dimensions has one, so other statements stay as they are.
+    const sortOf = (d: string) => this.model.dimensions.find((x) => x.id === d)?.sortColumns
+    const sorted = r.dims.map((d) => Object.values(sortOf(d) ?? {}).some(Boolean))
+    const sk = (i: number) => `s${i}`
 
     const ctes: string[] = []
     for (const s of sources) {
@@ -198,11 +204,17 @@ export class SqlBuilder {
         ...entity.map((e, i) => `${e} AS e${i}`),
         `${dc} AS dt`,
         ...ms.map((m) => `${this.measureExpr(s, m, p)} AS ${quoteIdent(`c_${m.id}`)}`),
+        ...r.dims.flatMap((d, i) => {
+          if (!sorted[i]) return []
+          const c = sortOf(d)?.[s.alias]
+          return [`${D.toFloat(c ? quoteIdent(this.column(s, c).name) : 'NULL')} AS ${sk(i)}`]
+        }),
       ]
       ctes.push(`${s.alias}_r AS (SELECT ${proj.join(', ')} FROM ${t} WHERE ${where.join(' AND ')})`)
 
       const win = (w: (typeof winParams)[number]) => (multi ? `dt >= ${w.from} AND dt < ${w.to} + 1` : null)
       const dimList = r.dims.map((_, i) => dimCol(i))
+      const sortAgg = r.dims.flatMap((_, i) => (sorted[i] ? [`MIN(${sk(i)}) AS ${sk(i)}`] : []))
       // Output list of src_a: the month key back to text (GROUP BY / GROUPING still refer to the input column).
       const dimOut = r.dims.map((d, i) => (d === 'tanggal' && D.monthKey && D.monthKeyText ? `${D.monthKeyText(dimCol(i))} AS ${dimCol(i)}` : dimCol(i)))
       const sets = `GROUPING SETS (${r.groupingSets.map((g) => `(${g.map(dimCol).join(', ')})`).join(', ')})`
@@ -214,6 +226,7 @@ export class SqlBuilder {
         const inner = [
           ...dimList,
           ...eList,
+          ...sortAgg,
           ...winParams.flatMap((w) => [
             ...ms.map((m) => {
               const c = quoteIdent(`c_${m.id}`)
@@ -224,10 +237,10 @@ export class SqlBuilder {
           ]),
         ]
         ctes.push(`${s.alias}_e AS (SELECT ${inner.join(', ')} FROM ${s.alias}_r GROUP BY ${[...dimList, ...eList].join(', ')})`)
-        const outer = [...dimOut, `${grouping} AS g`, ...winParams.flatMap((w) => [...ms.map((m) => `SUM(${quoteIdent(mcol(m.id, w.id))}) AS ${quoteIdent(mcol(m.id, w.id))}`), `SUM(${quoteIdent(ncol(s.alias, w.id))}) AS ${quoteIdent(ncol(s.alias, w.id))}`])]
+        const outer = [...dimOut, `${grouping} AS g`, ...sortAgg, ...winParams.flatMap((w) => [...ms.map((m) => `SUM(${quoteIdent(mcol(m.id, w.id))}) AS ${quoteIdent(mcol(m.id, w.id))}`), `SUM(${quoteIdent(ncol(s.alias, w.id))}) AS ${quoteIdent(ncol(s.alias, w.id))}`])]
         ctes.push(`${s.alias}_a AS (SELECT ${outer.join(', ')} FROM ${s.alias}_e GROUP BY ${sets})`)
       } else {
-        const outer = [...dimOut, `${grouping} AS g`, ...winParams.flatMap((w) => [...ms.map((m) => `${D.agg(m.type === 'distinct' ? 'COUNT_DISTINCT' : 'SUM', quoteIdent(`c_${m.id}`), win(w))} AS ${quoteIdent(mcol(m.id, w.id))}`), `${D.agg('COUNT', null, win(w))} AS ${quoteIdent(ncol(s.alias, w.id))}`])]
+        const outer = [...dimOut, `${grouping} AS g`, ...sortAgg, ...winParams.flatMap((w) => [...ms.map((m) => `${D.agg(m.type === 'distinct' ? 'COUNT_DISTINCT' : 'SUM', quoteIdent(`c_${m.id}`), win(w))} AS ${quoteIdent(mcol(m.id, w.id))}`), `${D.agg('COUNT', null, win(w))} AS ${quoteIdent(ncol(s.alias, w.id))}`])]
         ctes.push(`${s.alias}_a AS (SELECT ${outer.join(', ')} FROM ${s.alias}_r GROUP BY ${sets})`)
       }
     }
@@ -245,13 +258,14 @@ export class SqlBuilder {
     const select = [
       ...r.dims.map((_, i) => `${coalesce((a) => `${a}.${dimCol(i)}`, last)} AS ${dimCol(i)}`),
       `${coalesce((a) => `${a}.g`, last)} AS g`,
+      ...r.dims.flatMap((_, i) => (sorted[i] ? [`${coalesce((a) => `${a}.${sk(i)}`, last)} AS ${sk(i)}`] : [])),
       ...sources.flatMap((s) =>
         r.windows.flatMap((w) => [...base.filter((m) => m.source === s.alias).map((m) => `${s.alias}.${quoteIdent(mcol(m.id, w.id))}`), `${s.alias}.${quoteIdent(ncol(s.alias, w.id))}`]),
       ),
     ]
     const order = ['g DESC', ...r.dims.map((_, i) => `${dimCol(i)} NULLS FIRST`)].join(', ')
     const sql = `WITH ${ctes.join(',\n')}\nSELECT ${select.join(', ')} FROM ${from} ORDER BY ${order} LIMIT ${Math.max(1, Math.floor(r.limit))}`
-    return { sql, params: p.values, col: mcol, countCol: ncol, sources }
+    return { sql, params: p.values, col: mcol, countCol: ncol, sortCol: (i) => (sorted[i] ? sk(i) : null), sources }
   }
 }
 

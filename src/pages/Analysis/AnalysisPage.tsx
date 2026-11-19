@@ -209,7 +209,8 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
   const withCounts = measures.some((m) => measureSettings[m]?.display?.some((c) => c === 'count' || c === 'average'))
   const gridQuery: AnalyticsQuery | null = query ? { ...query, measures: gridMeasures, dimensions: dimensions.map((d) => d.id), chartBy: 'trend' } : null
   const windows = windowsOf(Object.fromEntries(measures.map((m) => [m, measureSettings[m]])), measures.some((m) => engine?.defs.get(m)?.needsMonth))
-  const hier = useHierarchy(gridQuery, withCounts, windows)
+  const columnDim = useAnalysisStore((st) => st.table.columnDim ?? null)
+  const hier = useHierarchy(gridQuery, withCounts, windows, columnDim && !dimIds.includes(columnDim) ? columnDim : null)
   const key = JSON.stringify(query)
   const fetcher = useCallback((signal: AbortSignal) => (query ? analyticsService.query(query, signal) : Promise.resolve(null)), [key]) // eslint-disable-line react-hooks/exhaustive-deps
   const res = useResource(fetcher, key, 220)
@@ -408,7 +409,7 @@ function Workspace({ catalog, onReload }: { catalog: NonNullable<Awaited<ReturnT
             {profile}
             {/* Data Profil and Tabel Hasil take turns: opening the profile collapses the table, collapsing it brings the table back. */}
             <div id="panel-table" className={s.tableSlot} hidden={!focus && profileOpen}>
-              {engine && <PivotGrid hier={hier} engine={engine} dims={dimensions} periodLabel={result?.summary.periodLabel ? `${result.summary.periodLabel}${hier.reportDate ? tr(' · tanggal laporan {0}', formatDate(hier.reportDate)) : ''}` : null} titleInfo={tableInfo} focus={focus} onToggleFocus={() => (focus ? setFocus(false) : enterFocus())} onChangeFilter={() => setFilterOpen(true)} />}
+              {engine && <PivotGrid hier={hier} engine={engine} dims={dimensions} columnChoices={allFields.filter((f) => f.kind === 'dimension')} periodLabel={result?.summary.periodLabel ? `${result.summary.periodLabel}${hier.reportDate ? tr(' · tanggal laporan {0}', formatDate(hier.reportDate)) : ''}` : null} titleInfo={tableInfo} focus={focus} onToggleFocus={() => (focus ? setFocus(false) : enterFocus())} onChangeFilter={() => setFilterOpen(true)} />}
             </div>
           </>
         )}

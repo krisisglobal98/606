@@ -22,6 +22,8 @@ import { ResultCache, scopeKey, stableKey } from './resultCache.ts'
 import { dimCol, levelOf, SqlBuilder, type DateWindow } from './sqlBuilder.ts'
 
 export const GRID_MAX_ROWS = 5000
+/** Columns of a matrix (a day per column for a month is 31; a year by day would not be readable). */
+export const GRID_MAX_COLUMNS = 100
 
 export const GridRequestSchema = z.object({
   query: AnalyticsQuerySchema,
@@ -35,6 +37,11 @@ export const GridRequestSchema = z.object({
    * mon = its whole month (the monthly budget of a pro-rata measure).
    */
   windows: z.array(z.enum(['hi', 'sdhi', 'ytd', 'mon'])).max(4).optional(),
+  /**
+   * Matrix: a dimension whose values become columns (e.g. hari = day 1–31), each row also keeping its total
+   * (the column at the right end) and the grand total per column. At most GRID_MAX_COLUMNS values.
+   */
+  columnDim: z.string().max(64).nullable().optional(),
 })
 export type GridRequest = z.infer<typeof GridRequestSchema>
 export type ReportWindow = 'hi' | 'sdhi' | 'ytd' | 'mon'
@@ -103,6 +110,9 @@ export class GridService {
 
     const known = new Set([...d.semantic.dimensions.map((x) => x.id), ...TIME_DIMENSIONS.map((t) => t.id)])
     if (q.dimensions.some((x) => !known.has(x))) throw badRequest('UNKNOWN_DIMENSION', 'Ada dimensi yang tidak dikenal di dataset ini.')
+    const colDim = req.columnDim || null
+    if (colDim && !known.has(colDim)) throw badRequest('UNKNOWN_DIMENSION', `Dimensi kolom "${colDim}" tidak dikenal di dataset ini.`)
+    if (colDim && q.dimensions.includes(colDim)) throw badRequest('COLUMN_DIM_IN_ROWS', 'Dimensi kolom sudah dipakai sebagai baris. Pilih dimensi lain untuk kolom, atau keluarkan dari baris.')
     const L = req.depth
     // Messages name the expected shape: depth is the index of the level to return; path holds one parent value per
     // level above it (values exactly as an earlier response returned them in rows[].path).
@@ -128,14 +138,20 @@ export class GridService {
     // Without row dimensions only the grand total is returned.
     const dims = q.dimensions.slice(0, L + 1)
     const base = b.baseMeasures(q.measures)
+    // Matrix: the column dimension is grouped last; every row set also comes without it (row total), and on request
+    // the grand total with and without it (total per column, overall total).
+    const rowSets: number[][] = dims.length ? [dims.map((_, i) => i), ...(req.withTotal ? [[]] : [])] : [[]]
+    const c = dims.length
+    const groupingSets = colDim ? rowSets.flatMap((set) => [[...set, c], set]) : rowSets
     const built = b.build({
-      dims,
-      groupingSets: dims.length ? [dims.map((_, i) => i), ...(req.withTotal ? [[]] : [])] : [[]],
+      dims: colDim ? [...dims, colDim] : dims,
+      groupingSets,
       measures: base,
       windows: [cur, prev, ...extraWindows],
       filters,
       scope,
-      limit: GRID_MAX_ROWS + 2,
+      // A matrix has a statement row per row × column (plus the row totals).
+      limit: colDim ? (GRID_MAX_ROWS + 2) * (GRID_MAX_COLUMNS + 2) : GRID_MAX_ROWS + 2,
     })
     const res = await this.engine.execute({ connectionId: d.connectionId, sql: built.sql, params: built.params, kind: 'analytics.grid', datasetId: d.id, userId, timeoutMs: this.config.limits.analyticsTimeoutMs }, signal)
 
@@ -160,30 +176,63 @@ export class GridService {
       return { cur: c, prev: p, ...w }
     }
     const n = dims.length
-    let total: ReturnType<typeof agg> | null = null
+    let total: (ReturnType<typeof agg> & { cols?: Record<string, ReturnType<typeof agg>> }) | null = null
     let sourceRows: number | null = null
-    const rows = []
+    const rows: (ReturnType<typeof agg> & { path: (string | null)[]; label: string; hasChildren: boolean; cols?: Record<string, ReturnType<typeof agg>>; sortKey?: number | null })[] = []
+    // Matrix cells (row key → column value → values) and the column values met, merged into the rows below.
+    const cells = new Map<string, Record<string, ReturnType<typeof agg>>>()
+    const colValues = new Map<string, string>()
+    const NULL_COL = '\u0000'
     for (const r of res.rows) {
-      const lvl = levelOf(Number(r.g), n)
+      // With a column dimension GROUPING() has one more (lowest) bit: 0 = grouped by the column value.
+      const g = Number(r.g)
+      const byCol = colDim ? (g & 1) === 0 : false
+      const lvl = levelOf(colDim ? g >> 1 : g, n)
+      const path = dims.map((_, i) => (r[dimCol(i)] as string | null) ?? null)
+      if (byCol) {
+        const cv = (r[dimCol(n)] as string | null) ?? NULL_COL
+        colValues.set(cv, cv === NULL_COL ? '(kosong)' : valueLabel(colDim!, cv))
+        const key = lvl === 0 ? '' : JSON.stringify(path)
+        if (lvl === 0 || (lvl === n && n)) cells.set(key, { ...(cells.get(key) ?? {}), [cv]: agg(r) })
+        continue
+      }
       if (lvl === 0) {
         total = agg(r)
         sourceRows = built.sources.reduce((a, s) => a + Number(r[built.countCol(s.alias, 'cur')] ?? 0), 0)
         continue
       }
       if (lvl !== n || !n) continue
-      const path = dims.map((_, i) => (r[dimCol(i)] as string | null) ?? null)
       const v = path[L] ?? null
       // A NULL value cannot be used as a parent filter, so such rows are leaves.
-      rows.push({ path, label: valueLabel(dims[L]!, v), hasChildren: L < q.dimensions.length - 1 && v != null, ...agg(r) })
+      const sc = built.sortCol(L)
+      const key = sc && r[sc] != null ? Number(r[sc]) : null
+      rows.push({ path, label: valueLabel(dims[L]!, v), hasChildren: L < q.dimensions.length - 1 && v != null, ...agg(r), ...(sc ? { sortKey: key } : {}) })
+    }
+    let columns: { value: string | null; label: string }[] | undefined
+    if (colDim) {
+      if (colValues.size > GRID_MAX_COLUMNS)
+        throw badRequest('TOO_MANY_COLUMNS', `Dimensi kolom menghasilkan ${colValues.size} kolom (paling banyak ${GRID_MAX_COLUMNS}). Persempit periode atau filter, atau pilih dimensi kolom lain.`)
+      columns = [...colValues.entries()]
+        .sort(([a], [z]) => (a === NULL_COL ? 1 : z === NULL_COL ? -1 : a.localeCompare(z, 'id', { numeric: true })))
+        .map(([value, label]) => ({ value: value === NULL_COL ? null : value, label }))
+      for (const row of rows) row.cols = cells.get(JSON.stringify(row.path)) ?? {}
+      if (total) total.cols = cells.get('') ?? {}
     }
     const cmp = (a: string | null, c: string | null) => (a == null ? 1 : c == null ? -1 : a.localeCompare(c, 'id', { numeric: true }))
     rows.sort((x, y) => {
-      for (let i = 0; i < n; i++) {
+      // Parents first (Expand All returns the children of every parent), then the level itself: by its sort key when
+      // the dimension has one (rows without a key after), then by value.
+      for (let i = 0; i < L; i++) {
         const c = cmp(x.path[i] ?? null, y.path[i] ?? null)
         if (c) return c
       }
-      return 0
+      if (x.sortKey !== undefined || y.sortKey !== undefined) {
+        const a = x.sortKey ?? null
+        const z = y.sortKey ?? null
+        if (a !== z) return a == null ? 1 : z == null ? -1 : a - z
+      }
+      return cmp(x.path[L] ?? null, y.path[L] ?? null)
     })
-    return { depth: L, rows: rows.slice(0, GRID_MAX_ROWS), total, truncated: rows.length > GRID_MAX_ROWS, sourceRows, ...(extra.length ? { reportDate: rd } : {}) }
+    return { depth: L, rows: rows.slice(0, GRID_MAX_ROWS), total, truncated: rows.length > GRID_MAX_ROWS || (!!colDim && res.rows.length >= (GRID_MAX_ROWS + 2) * (GRID_MAX_COLUMNS + 2)), sourceRows, ...(extra.length ? { reportDate: rd } : {}), ...(columns ? { columns } : {}) }
   }
 }

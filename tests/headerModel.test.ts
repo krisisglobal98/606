@@ -49,3 +49,16 @@ test('empty groups and unknown measures do not create columns', () => {
   assert.equal(h.rows.length, 1)
   assert.deepEqual(h.leaves.map((l) => l.m), ['revenue'])
 })
+
+test('matrix: each column value gets the Layout columns, Total at the right, a row of column values on top', async () => {
+  const { matrixHeader } = await import('@/pages/Analysis/grid/headerModel')
+  const { createEngine } = await import('@/semantic/measureEngine')
+  const { SALES } = await import('./fixtures')
+  const e = createEngine(SALES, [])
+  const base = buildHeader([{ kind: 'measure', id: 'revenue' }, { kind: 'measure', id: 'cost' }] as never, {}, e)
+  const m = matrixHeader(base, [{ value: '2026-01-05', label: '05 Jan 2026' }, { value: null, label: '(kosong)' }], 'hari')
+  assert.deepEqual(m.leaves.map((l) => [l.m, l.col ?? 'TOTAL']), [['revenue', '2026-01-05'], ['cost', '2026-01-05'], ['revenue', '\u0000'], ['cost', '\u0000'], ['revenue', 'TOTAL'], ['cost', 'TOTAL']])
+  assert.deepEqual(m.rows[0]!.map((c) => [c.label, c.small ?? null, c.colSpan]), [['5', 'Jan 2026', 2], ['(kosong)', null, 2], ['Total', null, 2]])
+  assert.equal(new Set(m.leaves.map((l) => l.key)).size, m.leaves.length, 'unique keys')
+  assert.equal(m.rows[1]!.length, 6, 'the measure row repeats under each column value')
+})

@@ -92,6 +92,7 @@ export function MappingEditor({ model, tables, onChange, readOnly }: { model: Se
               <th scope="col">{tr('Konsep')}</th>
               <th scope="col">{tr('Id')}</th>
               {m.sources.map((x) => <th key={x.alias} scope="col">{x.label} <span className="sub mono">{x.table}</span></th>)}
+              <th scope="col" title={tr('Urutan baris yang terpisah dari label: kolom angka (mis. urutan); kosong = urut menurut nilai')}>{tr('Kunci urut')}</th>
               <th scope="col"><span className="sr-only">{tr('Aksi')}</span></th>
             </tr>
           </thead>
@@ -108,6 +109,19 @@ export function MappingEditor({ model, tables, onChange, readOnly }: { model: Se
                     </select>
                   </td>
                 ))}
+                <td>
+                  {(() => {
+                    // The sort key is read from the first source where the dimension is mapped.
+                    const alias = m.sources.find((src) => d.columns[src.alias])?.alias
+                    if (!alias) return null
+                    return (
+                      <select className="select select--sm" value={d.sortColumns?.[alias] ?? ''} onChange={(e) => set({ dimensions: m.dimensions.map((x, j) => (j === i ? { ...x, sortColumns: e.target.value ? { [alias]: e.target.value } : undefined } : x)) })} aria-label={tr('Kunci urut {0}', d.label)}>
+                        <option value="">{tr('— urut menurut nilai —')}</option>
+                        {cols(alias).filter((c) => c.typeCategory === 'number').map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                      </select>
+                    )
+                  })()}
+                </td>
                 <td>
                   <button type="button" className="icon-btn" aria-label={tr('Hapus dimensi {0}', d.label)} onClick={() => set({ dimensions: m.dimensions.filter((_, j) => j !== i), entity: m.entity.filter((x) => x !== d.id), scopeFields: m.scopeFields.filter((x) => x !== d.id), filterFields: m.filterFields.filter((x) => x !== d.id), defaultLayout: { ...m.defaultLayout, dimensions: m.defaultLayout.dimensions.filter((x) => x !== d.id) } })}>
                     <Trash2 size={13} />
