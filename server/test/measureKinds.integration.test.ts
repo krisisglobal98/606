@@ -92,7 +92,7 @@ describe('conditional and distinct measures on PostgreSQL (TEMP table, rolled ba
     const plain = SemanticModelSchema.parse({ ...model(), dimensions: model().dimensions.map((d) => ({ ...d, sortColumns: undefined })) })
     const q2 = new SqlBuilder(plain, 'pg_temp', [table], dialectOf('postgresql')).build({ dims: ['status'], groupingSets: [[0]], measures: ['km'], windows: [{ id: 'cur', from: '2026-01-01', to: '2026-01-03' }], filters: [], scope: { kind: 'all' } as never, limit: 10 })
     assert.equal(q2.sortCol(0), null)
-    assert.ok(!/s0/.test(q2.sql), 'no sort column in the statement')
+    assert.ok(!new RegExp("\\bs0\\b").test(q2.sql), "no sort column in the statement")
   })
 
   test('the whole-month window of a report date', () => {
